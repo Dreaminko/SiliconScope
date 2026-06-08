@@ -1,0 +1,19 @@
+# Build
+.build/
+.swiftpm/
+DerivedData/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+
+# Generated icon output (regenerate from the master via generate_icns.sh)
+design_handoff_app_icon/build/
+
+# Reference sources (cloned, not part of this project)
+reference/
+
+# Tooling / local config
+.claude/
+
+# macOS
+.DS_Store
+**/.DS_Store

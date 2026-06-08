@@ -1,0 +1,479 @@
+//
+//  File:      DashboardView.swift
+//  Created:   2026-06-08
+//  Updated:   2026-06-08
+//  Developer: Kennt Kim / Calida Lab
+//  Overview:  Full-window dashboard. Header (chip, cores, SoC power, battery), then
+//             CPU + GPU side by side, combined Memory|Bandwidth and Network|Disk cards
+//             (btop-style vertical split), a Sensors accordion, and the process table.
+//  Notes:     No separate Power/Thermal cards — power lives in the header, temperature
+//             in the Sensors card. Combined cards split left/right with a Divider.
+//
+import SwiftUI
+import KtopCore
+
+struct DashboardView: View {
+    let monitor: KtopMonitor
+
+    var body: some View {
+        let snapshot = monitor.snapshot
+        ScrollView {
+            VStack(spacing: 8) {
+                let warnings = allWarnings(snapshot)
+                if !warnings.isEmpty { WarningBanner(warnings: warnings) }
+
+                HeaderView(topology: monitor.topology, power: snapshot.power, battery: snapshot.battery)
+
+                HStack(spacing: 8) {
+                    CPUCard(cpu: snapshot.cpu, topology: monitor.topology, history: monitor.history.pCPU)
+                    AcceleratorCard(gpu: snapshot.gpu, power: snapshot.power, bandwidth: snapshot.bandwidth,
+                                    anePeak: monitor.anePeakWatts, mediaPeak: monitor.mediaPeakGBs,
+                                    history: monitor.history.gpu)
+                }
+                .frame(height: 188)
+
+                HStack(alignment: .top, spacing: 8) {
+                    MemoryBandwidthCard(memory: snapshot.memory, bandwidth: snapshot.bandwidth,
+                                        bandwidthPeak: monitor.bandwidthPeakGBs,
+                                        memHistory: monitor.history.memory, bwHistory: monitor.history.bandwidth)
+                    NetworkDiskCard(network: snapshot.network, disk: snapshot.disk,
+                                    downHistory: monitor.history.netDown, upHistory: monitor.history.netUp,
+                                    readHistory: monitor.history.diskRead, writeHistory: monitor.history.diskWrite)
+                }
+                .frame(height: 240)
+
+                HStack(spacing: 8) {
+                    SensorsCard(temperature: snapshot.temperature, thermal: snapshot.thermal)
+                    ProcessCard(processes: snapshot.processes)
+                }
+                .frame(height: 240)
+            }
+            .padding(10)
+        }
+        .background(Theme.bg)
+        .foregroundStyle(Theme.text)
+    }
+
+    private func allWarnings(_ s: SystemSnapshot) -> [SystemSnapshot.Warning] {
+        var warnings = s.warnings
+        if s.gpu.usage > 0.5 && s.bandwidth.totalGBs > 0.8 * monitor.bandwidthPeakGBs {
+            warnings.append(.init(level: .warning,
+                                  message: "Bandwidth-bound — LLM token throughput limited"))
+        }
+        return warnings
+    }
+}
+
+// MARK: - Header
+
+private struct HeaderView: View {
+    let topology: CPUTopology?
+    let power: PowerSample
+    let battery: BatteryInfo
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text("WhisPlayInfo").font(.system(size: 14, weight: .bold, design: .monospaced))
+            if let t = topology {
+                Text(t.chipName).font(.system(size: 11, design: .monospaced)).foregroundStyle(Theme.dim)
+                Text("\(t.eCoreCount + t.pCoreCount) cores · \(t.eCoreCount)E+\(t.pCoreCount)P")
+                    .font(.system(size: 11, design: .monospaced)).foregroundStyle(Theme.faint)
+            }
+            Spacer()
+            Text(String(format: "%.1f W", power.socWatts))
+                .font(.system(size: 12, weight: .medium, design: .monospaced)).foregroundStyle(Theme.dim)
+            if battery.hasBattery {
+                HStack(spacing: 3) {
+                    if battery.isCharging {
+                        Image(systemName: "bolt.fill").font(.system(size: 9)).foregroundStyle(Theme.heat(0.2))
+                    }
+                    Text("\(Int(battery.percent.rounded()))%")
+                        .font(.system(size: 12, weight: .medium, design: .monospaced))
+                        .foregroundStyle(battery.percent < 20 ? Theme.heat(1) : Theme.text)
+                }
+            }
+        }
+        .padding(.horizontal, 4)
+        .padding(.top, 2)
+    }
+}
+
+private struct WarningBanner: View {
+    let warnings: [SystemSnapshot.Warning]
+
+    var body: some View {
+        VStack(spacing: 5) {
+            ForEach(warnings) { warning in
+                let critical = warning.level == .critical
+                HStack(spacing: 8) {
+                    Image(systemName: critical ? "exclamationmark.triangle.fill" : "exclamationmark.circle.fill")
+                        .font(.system(size: 11))
+                    Text(warning.message).font(.system(size: 11.5, weight: .medium, design: .monospaced))
+                    Spacer()
+                }
+                .foregroundStyle(critical ? Color(red: 1, green: 0.7, blue: 0.7) : Color(red: 1, green: 0.85, blue: 0.6))
+                .padding(.horizontal, 11).padding(.vertical, 7)
+                .background((critical ? Color.red : Color.orange).opacity(0.16),
+                            in: RoundedRectangle(cornerRadius: 8))
+                .overlay(RoundedRectangle(cornerRadius: 8)
+                    .strokeBorder((critical ? Color.red : Color.orange).opacity(0.4), lineWidth: 1))
+            }
+        }
+    }
+}
+
+// MARK: - Compute cards
+
+private struct CPUCard: View {
+    let cpu: CPUSample
+    let topology: CPUTopology?
+    let history: [Double]
+
+    var body: some View {
+        Card(title: "CPU") {
+            Bar(label: "E-cores", value: cpu.eUsage,
+                detail: String(format: "%.0f%%  %.0f MHz", cpu.eUsagePercent, cpu.eFreqMHz))
+            Bar(label: "P-cores", value: cpu.pUsage,
+                detail: String(format: "%.0f%%  %.0f MHz", cpu.pUsagePercent, cpu.pFreqMHz))
+            Spacer(minLength: 4)
+            Sparkline(values: history, color: Theme.accent, height: 24)
+        }
+    }
+}
+
+private struct AcceleratorCard: View {
+    let gpu: GPUSample
+    let power: PowerSample
+    let bandwidth: BandwidthSample
+    let anePeak: Double
+    let mediaPeak: Double
+    let history: [Double]
+
+    var body: some View {
+        Card(title: "GPU / Media / Neural Engine") {
+            Bar(label: "GPU", value: gpu.usage,
+                detail: String(format: "%.0f%%  %.1f W  %.0f MHz", gpu.usagePercent, power.gpuWatts, gpu.freqMHz))
+            Bar(label: "Media", value: min(1, bandwidth.mediaGBs / max(mediaPeak, 0.5)),
+                detail: String(format: "%.1f GB/s", bandwidth.mediaGBs))
+            Bar(label: "ANE est.", value: min(1, power.aneWatts / max(anePeak, 0.1)),
+                detail: String(format: "%.1f W", power.aneWatts))
+            KV(key: "DRAM power", value: String(format: "%.1f W", power.dramWatts))
+            Spacer(minLength: 4)
+            Sparkline(values: history, color: Color(red: 0.62, green: 0.55, blue: 0.95), height: 24)
+        }
+    }
+}
+
+// MARK: - Memory & Bandwidth (split)
+
+private struct MemoryBandwidthCard: View {
+    let memory: MemorySample
+    let bandwidth: BandwidthSample
+    let bandwidthPeak: Double
+    let memHistory: [Double]
+    let bwHistory: [Double]
+
+    private let wiredColor = Color(red: 0.36, green: 0.62, blue: 0.98)
+    private let activeColor = Color(red: 0.34, green: 0.74, blue: 0.62)
+    private let compressedColor = Color(red: 0.62, green: 0.55, blue: 0.95)
+    private let freeColor = Color.white.opacity(0.10)
+
+    var body: some View {
+        Card(title: "Memory & Bandwidth") {
+            HStack(alignment: .top, spacing: 10) {
+                memorySection.frame(maxWidth: .infinity, alignment: .leading)
+                Divider().overlay(Theme.border)
+                bandwidthSection.frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    private var memorySection: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            SubLabel("Memory")
+            HStack {
+                Text(String(format: "%.1f / %.0f GB", memory.usedGB, memory.totalGB))
+                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+                Spacer()
+                Text(String(format: "%.0f%%", memory.usedPercent))
+                    .font(.system(size: 11, design: .monospaced)).foregroundStyle(Theme.dim)
+            }
+            StackedBar(segments: [
+                (memory.wiredFraction, wiredColor),
+                (memory.activeFraction, activeColor),
+                (memory.compressedFraction, compressedColor),
+                (memory.freeFraction, freeColor),
+            ])
+            LegendRow(color: wiredColor, key: "Wired", value: String(format: "%.1f GB", memory.wiredGB))
+            LegendRow(color: activeColor, key: "Active", value: String(format: "%.1f GB", memory.activeGB))
+            LegendRow(color: compressedColor, key: "Compressed", value: String(format: "%.1f GB", memory.compressedGB))
+            LegendRow(color: freeColor, key: "Free", value: String(format: "%.1f GB", memory.freeGB))
+            KV(key: "Swap", value: String(format: "%.1f GB", memory.swapUsedGB))
+            Spacer(minLength: 4)
+            Sparkline(values: memHistory, color: activeColor, height: 22)
+        }
+    }
+
+    private var bandwidthSection: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            SubLabel("Bandwidth")
+            Bar(label: "Total", value: min(1, bandwidth.totalGBs / max(bandwidthPeak, 1)),
+                detail: String(format: "%.0f GB/s", bandwidth.totalGBs))
+            KV(key: "CPU", value: String(format: "%.0f GB/s", bandwidth.cpuGBs))
+            KV(key: "GPU", value: String(format: "%.0f GB/s", bandwidth.gpuGBs))
+            KV(key: "Media", value: String(format: "%.0f GB/s", bandwidth.mediaGBs))
+            KV(key: "Other", value: String(format: "%.0f GB/s", bandwidth.otherGBs))
+            Spacer(minLength: 4)
+            Sparkline(values: bwHistory, color: Color(red: 0.42, green: 0.66, blue: 0.95), height: 22)
+        }
+    }
+}
+
+// MARK: - Network & Disk (split)
+
+private struct NetworkDiskCard: View {
+    let network: NetworkSample
+    let disk: DiskSample
+    let downHistory: [Double]
+    let upHistory: [Double]
+    let readHistory: [Double]
+    let writeHistory: [Double]
+
+    private let downColor = Color(red: 0.34, green: 0.74, blue: 0.62)
+    private let upColor = Color(red: 0.95, green: 0.62, blue: 0.30)
+
+    var body: some View {
+        Card(title: "Network & Disk") {
+            HStack(alignment: .top, spacing: 10) {
+                networkSection.frame(maxWidth: .infinity, alignment: .leading)
+                Divider().overlay(Theme.border)
+                diskSection.frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    private var networkSection: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            SubLabel("Network")
+            KV(key: "↓ Download", value: formatRate(network.downloadBytesPerSec), valueColor: downColor)
+            KV(key: "↑ Upload", value: formatRate(network.uploadBytesPerSec), valueColor: upColor)
+            Spacer(minLength: 4)
+            Sparkline(values: downHistory, color: downColor, height: 22)
+            Sparkline(values: upHistory, color: upColor, height: 22)
+        }
+    }
+
+    private var diskSection: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            SubLabel("Disk")
+            KV(key: "Read", value: formatRate(disk.readBytesPerSec), valueColor: downColor)
+            KV(key: "Write", value: formatRate(disk.writeBytesPerSec), valueColor: upColor)
+            Bar(label: "Used", value: disk.usedFraction,
+                detail: "free \(formatBytes(disk.freeBytes)) / \(formatBytes(disk.totalBytes))")
+            Spacer(minLength: 4)
+            Sparkline(values: readHistory, color: downColor, height: 22)
+            Sparkline(values: writeHistory, color: upColor, height: 22)
+        }
+    }
+}
+
+private struct SubLabel: View {
+    let text: String
+    init(_ text: String) { self.text = text }
+    var body: some View {
+        Text(text.uppercased())
+            .font(.system(size: 9, weight: .semibold, design: .monospaced))
+            .tracking(1.2).foregroundStyle(Theme.faint)
+    }
+}
+
+// MARK: - Sensors (fans/pressure + accordion)
+
+private struct SensorsCard: View {
+    let temperature: TemperatureSample
+    let thermal: ThermalSample
+    @AppStorage("temperatureFahrenheit") private var fahrenheit = false
+
+    private var pressureColor: Color {
+        switch thermal.pressure {
+        case .nominal: return Theme.heat(0.2)
+        case .fair: return Theme.heat(0.65)
+        case .serious, .critical: return Theme.heat(1.0)
+        default: return Theme.dim
+        }
+    }
+
+    var body: some View {
+        Card(title: "Sensors") {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 16) {
+                    HStack(spacing: 6) {
+                        Text("Pressure").font(.system(size: 11, design: .monospaced)).foregroundStyle(Theme.dim)
+                        Text(thermal.pressure.rawValue)
+                            .font(.system(size: 11, weight: .medium, design: .monospaced)).foregroundStyle(pressureColor)
+                    }
+                    HStack(spacing: 6) {
+                        Text("Fans").font(.system(size: 11, design: .monospaced)).foregroundStyle(Theme.dim)
+                        Text(thermal.hasFans
+                            ? thermal.fanRPMs.map { String(format: "%.0f", $0) }.joined(separator: " / ") + " rpm"
+                            : "fanless")
+                            .font(.system(size: 11, weight: .medium, design: .monospaced)).foregroundStyle(Theme.text)
+                    }
+                    Spacer()
+                }
+                Divider().overlay(Theme.border)
+                if temperature.groups.isEmpty {
+                    Text("no sensors available")
+                        .font(.system(size: 11, design: .monospaced)).foregroundStyle(Theme.dim)
+                    Spacer(minLength: 0)
+                } else {
+                    ScrollView {
+                        VStack(spacing: 2) {
+                            ForEach(temperature.groups) { group in
+                                SensorGroupRow(group: group, fahrenheit: fahrenheit)
+                            }
+                        }
+                    }
+                    .frame(maxHeight: .infinity)
+                }
+            }
+        }
+    }
+}
+
+private struct SensorGroupRow: View {
+    let group: SensorGroup
+    let fahrenheit: Bool
+    @State private var expanded = false
+
+    var body: some View {
+        DisclosureGroup(isExpanded: $expanded) {
+            let columns = [GridItem(.adaptive(minimum: 150), spacing: 14)]
+            LazyVGrid(columns: columns, alignment: .leading, spacing: 3) {
+                ForEach(group.sensors) { sensor in
+                    HStack(spacing: 6) {
+                        Text(sensor.name).font(.system(size: 10.5, design: .monospaced))
+                            .foregroundStyle(Theme.dim).lineLimit(1)
+                        Spacer(minLength: 4)
+                        Text(formatTemperature(sensor.celsius, fahrenheit: fahrenheit))
+                            .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+                            .foregroundStyle(Theme.heat(min(1, sensor.celsius / 100)))
+                    }
+                }
+            }
+            .padding(.top, 4)
+        } label: {
+            HStack {
+                Text(group.category.rawValue)
+                    .font(.system(size: 11.5, weight: .medium, design: .monospaced)).foregroundStyle(Theme.text)
+                Text("(\(group.count))").font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.faint)
+                Spacer()
+                Text("avg \(formatTemperature(group.average, fahrenheit: fahrenheit)) · max \(formatTemperature(group.maximum, fahrenheit: fahrenheit))")
+                    .font(.system(size: 10.5, design: .monospaced))
+                    .foregroundStyle(Theme.heat(min(1, group.maximum / 100)))
+            }
+        }
+        .tint(Theme.dim)
+    }
+}
+
+// MARK: - Processes (interactive)
+
+private struct ProcessCard: View {
+    let processes: [ProcessRow]
+
+    enum SortKey { case cpu, memory, name }
+    @State private var sortKey: SortKey = .cpu
+    @State private var filter: String = ""
+    @State private var pendingKill: ProcessRow?
+    @State private var pendingForce = false
+
+    private var rows: [ProcessRow] {
+        let base = filter.isEmpty
+            ? processes
+            : processes.filter { $0.name.localizedCaseInsensitiveContains(filter) }
+        let sorted: [ProcessRow]
+        switch sortKey {
+        case .cpu:    sorted = base.sorted { $0.cpuPercent > $1.cpuPercent }
+        case .memory: sorted = base.sorted { $0.memoryBytes > $1.memoryBytes }
+        case .name:   sorted = base.sorted { $0.name.lowercased() < $1.name.lowercased() }
+        }
+        return Array(sorted.prefix(200))
+    }
+
+    var body: some View {
+        Card(title: "Processes") {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Image(systemName: "magnifyingglass").font(.system(size: 10)).foregroundStyle(Theme.faint)
+                    TextField("Filter by name", text: $filter)
+                        .textFieldStyle(.plain).font(.system(size: 11, design: .monospaced))
+                    if !filter.isEmpty {
+                        Button { filter = "" } label: { Image(systemName: "xmark.circle.fill") }
+                            .buttonStyle(.plain).foregroundStyle(Theme.faint)
+                    }
+                }
+                .padding(.horizontal, 7).padding(.vertical, 5)
+                .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 6))
+
+                HStack {
+                    Text("PID").frame(width: 56, alignment: .leading)
+                    header("CPU%", .cpu).frame(width: 60, alignment: .trailing)
+                    header("MEMORY", .memory).frame(width: 84, alignment: .trailing)
+                    header("NAME", .name).frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+
+                ScrollView {
+                    LazyVStack(spacing: 2) {
+                        ForEach(rows) { process in
+                            HStack {
+                                Text("\(process.pid)").frame(width: 56, alignment: .leading).foregroundStyle(Theme.faint)
+                                Text(String(format: "%.1f", process.cpuPercent))
+                                    .frame(width: 60, alignment: .trailing)
+                                    .foregroundStyle(Theme.heat(min(1, process.cpuPercent / 100)))
+                                Text(String(format: "%.0f MB", process.memoryMB))
+                                    .frame(width: 84, alignment: .trailing).foregroundStyle(Theme.dim)
+                                Text(process.name).frame(maxWidth: .infinity, alignment: .leading).lineLimit(1)
+                            }
+                            .font(.system(size: 11, design: .monospaced))
+                            .contentShape(Rectangle())
+                            .contextMenu {
+                                Button("Quit \(process.name)") { pendingKill = process; pendingForce = false }
+                                Button("Force Quit \(process.name)", role: .destructive) {
+                                    pendingKill = process; pendingForce = true
+                                }
+                            }
+                        }
+                    }
+                }
+                .frame(maxHeight: .infinity)
+            }
+        }
+        .confirmationDialog(
+            pendingKill.map { "\(pendingForce ? "Force quit" : "Quit") \($0.name)  (pid \($0.pid))?" } ?? "",
+            isPresented: Binding(get: { pendingKill != nil }, set: { if !$0 { pendingKill = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button(pendingForce ? "Force Quit" : "Quit", role: .destructive) {
+                if let process = pendingKill {
+                    if pendingForce { ProcessControl.forceKill(pid: process.pid) }
+                    else { ProcessControl.terminate(pid: process.pid) }
+                }
+                pendingKill = nil
+            }
+            Button("Cancel", role: .cancel) { pendingKill = nil }
+        }
+    }
+
+    @ViewBuilder private func header(_ title: String, _ key: SortKey) -> some View {
+        Button { sortKey = key } label: {
+            HStack(spacing: 2) {
+                Text(title)
+                if sortKey == key { Image(systemName: "chevron.down").font(.system(size: 7)) }
+            }
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(sortKey == key ? Theme.accent : Theme.faint)
+    }
+}
