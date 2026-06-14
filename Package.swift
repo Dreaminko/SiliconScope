@@ -52,5 +52,17 @@ let package = Package(
                 .linkedFramework("IOKit"),
             ]
         ),
+
+        // Unit tests for the data layer. Needs the same dynamic_lookup flag because it
+        // links SiliconScopeCore, which references IOReport symbols resolved at runtime.
+        .testTarget(
+            name: "SiliconScopeCoreTests",
+            dependencies: ["SiliconScopeCore"],
+            linkerSettings: [
+                .unsafeFlags(["-Xlinker", "-undefined", "-Xlinker", "dynamic_lookup"]),
+                .linkedFramework("CoreFoundation"),
+                .linkedFramework("IOKit"),
+            ]
+        ),
     ]
 )
