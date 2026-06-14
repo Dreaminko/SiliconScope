@@ -34,13 +34,15 @@ public enum Bottleneck: String, Sendable {
         }
     }
 
-    /// One-line explanation of what the verdict means for an AI workload.
+    /// One-line, workload-agnostic explanation of the limiter. (Whether the work is AI,
+    /// graphics, or video is asserted separately — only when there's evidence — so these
+    /// stay honest for any GPU workload.)
     public var detail: String {
         switch self {
         case .idle:             return "No significant GPU workload"
         case .gpuActive:        return "GPU busy — no single bottleneck"
-        case .bandwidthBound:   return "Memory BW near ceiling, GPU not maxed — LLM token generation"
-        case .computeBound:     return "GPU saturated, bandwidth has headroom — prompt processing"
+        case .bandwidthBound:   return "Memory bandwidth is the limiter"
+        case .computeBound:     return "GPU compute is the limiter"
         case .thermalThrottled: return "Clock held down by heat — sustained performance limited"
         case .memoryPressured:  return "Unified memory full — swapping limits throughput"
         }

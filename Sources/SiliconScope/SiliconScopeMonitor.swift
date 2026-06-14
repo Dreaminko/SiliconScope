@@ -123,7 +123,8 @@ final class SiliconScopeMonitor {
     // Mirrors gpuClockPeakMHz tracking — the static budget risk lives in Core, the
     // temporal refinement (the real "before tokens/sec collapses" signal) lives here.
     private var previousMem: (compressions: UInt64, swapins: UInt64, swapouts: UInt64, timeNs: UInt64)?
-    private(set) var memorySwapRate: Double = 0          // (swapins + swapouts) pages/sec
+    private(set) var memorySwapOutRate: Double = 0       // swapouts/sec — eviction under pressure
+                                                         // (NOT swapins, which are normal recovery reads)
     private(set) var memoryCompressionRate: Double = 0   // compressions pages/sec
     private static let compressionRatePagesPerSec = 200.0
 
@@ -139,7 +140,7 @@ final class SiliconScopeMonitor {
     /// while headroom is nearly gone — catches the collapse before static used% would.
     var memoryRisk: MemoryBudget.Risk {
         let base = snapshot.memoryBudget.risk
-        if base == .swapping || memorySwapRate > 0 { return .swapping }
+        if base == .swapping || memorySwapOutRate > 0 { return .swapping }
         if memoryCompressionRate > Self.compressionRatePagesPerSec
             && snapshot.memoryBudget.headroomNowBytes < (1 << 30) {
             return .tight
@@ -151,7 +152,7 @@ final class SiliconScopeMonitor {
         guard loopTask == nil else { return }
         // C5: clear rate state so the first tick after (re)start emits no spurious delta.
         previousMem = nil
-        memorySwapRate = 0
+        memorySwapOutRate = 0
         memoryCompressionRate = 0
         let sampler = sampler
         loopTask = Task { [weak self] in
@@ -187,7 +188,7 @@ final class SiliconScopeMonitor {
         stopAPIPolling()
         // C5: drop rate state so a later restart doesn't diff across the pause.
         previousMem = nil
-        memorySwapRate = 0
+        memorySwapOutRate = 0
         memoryCompressionRate = 0
     }
 
@@ -254,14 +255,16 @@ final class SiliconScopeMonitor {
         let m = snap.memory
         defer { previousMem = (m.compressions, m.swapins, m.swapouts, nowNs) }
         guard let prev = previousMem, nowNs > prev.timeNs else {
-            memorySwapRate = 0
+            memorySwapOutRate = 0
             memoryCompressionRate = 0
             return
         }
         let secs = Double(nowNs - prev.timeNs) / 1_000_000_000
         guard secs > 0 else { return }
         func delta(_ now: UInt64, _ was: UInt64) -> Double { now >= was ? Double(now - was) : 0 }
-        memorySwapRate = (delta(m.swapins, prev.swapins) + delta(m.swapouts, prev.swapouts)) / secs
+        // Only swapouts (eviction under pressure) signal a problem; swapins are recovery
+        // reads of pages swapped earlier and must NOT trip the "swapping" warning.
+        memorySwapOutRate = delta(m.swapouts, prev.swapouts) / secs
         memoryCompressionRate = delta(m.compressions, prev.compressions) / secs
     }
 }

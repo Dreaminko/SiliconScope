@@ -37,13 +37,18 @@ public struct SystemSnapshot: Sendable {
         return aiRuntime.totalCPUPercent > 100 && gpu.usage > 0.30 && gpu.usage < 0.90
     }
 
-    /// Heuristic: which compute engine the current workload most likely uses.
+    /// Honest workload attribution. GPU activity alone is NOT AI — it could be graphics,
+    /// gaming, or video. We only assert "LLM" with evidence (a runtime serving a loaded
+    /// model, or a multi-GB resident model in a detected runtime); ANE power implies ML;
+    /// Media-engine traffic implies video. Otherwise we say the type is unknown.
     public var likelyAIEngine: String {
-        if power.aneWatts > 1.0 { return "ANE (CoreML-style)" }
-        if gpu.usage > 0.25 || power.gpuWatts > 3.0 || bandwidth.gpuGBs > 20 {
-            return "GPU / Metal (LLM-style)"
-        }
-        return "idle"
+        if runtimeAPI.isReachable, !runtimeAPI.loadedModels.isEmpty { return "LLM (GPU/Metal)" }
+        if aiRuntime.primaryMemoryBytes > (2 << 30) { return "LLM (likely)" }
+        if power.aneWatts > 1.0 { return "ANE (CoreML)" }
+        let gpuBusy = gpu.usage > 0.25 || power.gpuWatts > 3.0 || bandwidth.gpuGBs > 20
+        guard gpuBusy else { return "idle" }
+        if bandwidth.mediaGBs > 0.5 { return "GPU active — incl. video" }
+        return "GPU active — type unknown"
     }
 
     public struct Warning: Sendable, Identifiable, Equatable {
