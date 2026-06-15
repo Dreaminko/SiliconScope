@@ -16,6 +16,7 @@ reference/
 
 # Tooling / local config
 .claude/
+CLAUDE.md
 
 # macOS
 .DS_Store
