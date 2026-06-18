@@ -1,5 +1,23 @@
 # Changelog
 
+## v1.5.0 — 2026-06-18
+
+On-demand benchmarking — measure how fast a model actually runs on *your* Mac.
+
+- **Measure tok/s** — a button in the AI Runtime card runs one short fixed generation and
+  reports the exact decode rate (Ollama `eval_count`/`eval_duration`; an OpenAI-compatible
+  wall-clock for LM Studio / llama.cpp). Also available as `sscope-cli --bench`.
+- **tokens-per-watt** — mean SoC package power over the run (GPU-active samples only) →
+  tok/J, Apple Silicon's signature efficiency metric, shown beside tok/s.
+- **Per-model record** — each result is stored per model + runtime and shown for the loaded
+  model, persisted across launches.
+- **Light menu-bar fix** — the menu-bar glyph's "SS" label and bar tracks now adapt to the
+  menu-bar appearance (they were invisible on a light menu bar).
+
+Why on-demand: current Ollama ships its embedded llama-server without `--metrics` (so
+`/metrics` returns 501) and `/slots` carries no decoded-token count — there is no passive
+live tok/s to read, so it is measured directly instead.
+
 ## v1.4.0 — 2026-06-16
 
 Menu-bar cockpit + chip-agnostic accuracy.

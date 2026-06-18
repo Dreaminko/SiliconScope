@@ -32,21 +32,23 @@ nor Activity Monitor cover.
 
 ## v1.5 roadmap — from "AI monitor" to "local-AI operations"
 
-The metric local-LLM users live by is **tokens/sec**, and it's the biggest remaining
-gap (we only get it from llama.cpp today). Build there first, then layer per-machine
-learning and RAM hygiene on top — that's what turns a gauge into an operations tool.
-Each tier is roughly ordered smallest-valuable-first; the validation here came from real
-M1 Max runs (MoE 26B, dense 12B/31B) earlier in development.
+The metric local-LLM users live by is **tokens/sec**. Build there first, then layer
+per-machine learning and RAM hygiene on top — that's what turns a gauge into an operations
+tool. Validation came from real M1 Max runs (MoE 26B, dense 12B/31B).
 
-### Tier 1 — speed (build first)
+### Tier 1 — speed ✅ done (on-demand benchmark)
 
-- **tokens/sec for every runtime, with history.** Ollama is feasible *now*: read the
-  embedded `llama-server` `/metrics` (`predicted_tokens_seconds`) at the **dynamic argv
-  port we already parse** (`AIRuntimeSample.ollamaEmbeddedPort`). llama.cpp is already
-  done; LM Studio exposes no passive rate (note it in-UI). Add a tok/s sparkline.
-- **tokens-per-watt (efficiency).** tok/s ÷ package power — Apple Silicon's signature
-  metric, near-absent in other tools. Combines the runtime API with the chip power we
-  already sample.
+- **tokens/sec — measured on demand, not passively.** The assumed passive route does NOT
+  work on current Ollama (0.30.8): it runs its embedded `llama-server` **without `--metrics`**
+  (→ `/metrics` is 501), and `/slots` carries no decoded-token count. So instead a "Measure
+  tok/s" button runs ONE short fixed generation and reads the exact decode rate — Ollama
+  `/api/generate` (`eval_count`/`eval_duration`), or an OpenAI-compatible wall-clock for
+  LM Studio / llama.cpp. Also `sscope-cli --bench`. (Validated: gemma4:26b ≈ 60 tok/s.)
+- **tokens-per-watt (efficiency) ✅** — mean SoC package power sampled over the benchmark
+  window (GPU-active samples only) → tok/J, shown beside tok/s. Apple Silicon's signature
+  metric, near-absent elsewhere.
+- **Per-model record ✅** (pulled forward from Tier 2) — each result is stored per
+  model+runtime and shown for the loaded model. A history chart / peak-temp log is still open.
 
 ### Tier 2 — make it a tool, not just a gauge
 
