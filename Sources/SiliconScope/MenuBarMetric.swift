@@ -97,23 +97,34 @@ enum MenuBarGlyph {
         return img
     }
 
-    /// Stacked label + two short value lines (MEM / NET / SSD), iStat "U:/F:" style.
-    static func twoLine(label: String, line1: String, line2: String, dark: Bool) -> NSImage {
+    /// Stacked label + two "prefix … value" rows (MEM / NET / SSD), iStat style: the prefix
+    /// ("U:" / "F:" / "↓") is pinned left and the value is right-aligned in a fixed column, so
+    /// numbers line up cleanly and the glyph width never changes as values grow/shrink.
+    /// `reserveValue` is a worst-case value template ("999.9 GB") that sets the value column.
+    static func twoLine(label: String, prefix1: String, value1: String,
+                        prefix2: String, value2: String, dark: Bool, reserveValue: String) -> NSImage {
         let ink = dark ? NSColor.white : NSColor.black
         let font = NSFont.systemFont(ofSize: 8.5, weight: .medium)
-        let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: ink.withAlphaComponent(0.92)]
-        let s1 = line1 as NSString, s2 = line2 as NSString
-        let textW = ceil(max(s1.size(withAttributes: attrs).width, s2.size(withAttributes: attrs).width))
-        let gap: CGFloat = 3, labelW: CGFloat = 7
-        let width = ceil(labelW + gap + textW) + 2
+        let pAttrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: ink.withAlphaComponent(0.72)]
+        let vAttrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: ink.withAlphaComponent(0.95)]
+        let p1 = prefix1 as NSString, p2 = prefix2 as NSString
+        let v1 = value1 as NSString, v2 = value2 as NSString
+        let prefixW = ceil(max(p1.size(withAttributes: pAttrs).width, p2.size(withAttributes: pAttrs).width))
+        let valueW = ceil(max((reserveValue as NSString).size(withAttributes: vAttrs).width,
+                              v1.size(withAttributes: vAttrs).width, v2.size(withAttributes: vAttrs).width))
+        let gap: CGFloat = 3, innerGap: CGFloat = 4, labelW: CGFloat = 7
+        let width = ceil(labelW + gap + prefixW + innerGap + valueW) + 2
         let img = NSImage(size: NSSize(width: width, height: height), flipped: false) { _ in
             let w = drawStackedLabel(label, ink: ink)
-            let rightEdge = w + gap + textW   // both lines right-aligned so values line up
-            let w1 = s1.size(withAttributes: attrs).width
-            let w2 = s2.size(withAttributes: attrs).width
-            let lh = s1.size(withAttributes: attrs).height
-            s1.draw(at: NSPoint(x: rightEdge - w1, y: height / 2 + (height / 2 - lh) / 2), withAttributes: attrs)  // top
-            s2.draw(at: NSPoint(x: rightEdge - w2, y: (height / 2 - lh) / 2), withAttributes: attrs)               // bottom
+            let originX = w + gap
+            let valueRight = originX + prefixW + innerGap + valueW
+            let lh = v1.size(withAttributes: vAttrs).height
+            let yTop = height / 2 + (height / 2 - lh) / 2
+            let yBot = (height / 2 - lh) / 2
+            p1.draw(at: NSPoint(x: originX, y: yTop), withAttributes: pAttrs)                                   // prefix left
+            p2.draw(at: NSPoint(x: originX, y: yBot), withAttributes: pAttrs)
+            v1.draw(at: NSPoint(x: valueRight - v1.size(withAttributes: vAttrs).width, y: yTop), withAttributes: vAttrs)  // value right
+            v2.draw(at: NSPoint(x: valueRight - v2.size(withAttributes: vAttrs).width, y: yBot), withAttributes: vAttrs)
             return true
         }
         img.isTemplate = false
@@ -145,6 +156,22 @@ func compactBytes(_ b: UInt64) -> String { compactGB(Double(b) / 1_073_741_824) 
 func compactRate(_ bytesPerSec: Double) -> String {
     let k = bytesPerSec / 1024
     return k >= 1024 ? String(format: "%.1fM", k / 1024) : String(format: "%.0fK", k)
+}
+
+// iStat-style readouts for the menu-bar glyphs: full unit + space. Disk/network use the
+// decimal (1000-base) convention so values match Finder/iStat ("576.2 GB", not 536 GiB).
+func iStatBytes(_ b: UInt64) -> String {
+    let d = Double(b)
+    if d >= 1e12 { return String(format: "%.2f TB", d / 1e12) }
+    if d >= 1e9  { return String(format: "%.1f GB", d / 1e9) }
+    if d >= 1e6  { return String(format: "%.0f MB", d / 1e6) }
+    return String(format: "%.0f KB", d / 1e3)
+}
+func iStatGB(_ gb: Double) -> String { String(format: "%.1f GB", gb) }   // memory: binary GiB shown as GB
+func iStatRate(_ bytesPerSec: Double) -> String {
+    if bytesPerSec >= 1e6 { return String(format: "%.1f MB", bytesPerSec / 1e6) }
+    if bytesPerSec >= 1e3 { return String(format: "%.0f KB", bytesPerSec / 1e3) }
+    return String(format: "%.0f B", bytesPerSec)
 }
 
 // MARK: - Shared dropdown components
@@ -288,7 +315,7 @@ struct CPUMenuDropdown: View {
                 Label("Open Dashboard", systemImage: "macwindow").frame(maxWidth: .infinity)
             }
         }
-        .padding(12).frame(width: 280).background(Theme.bg).foregroundStyle(Theme.text)
+        .padding(12).frame(width: 250).background(Theme.bg).foregroundStyle(Theme.text)
     }
 
     private func coreRow(_ label: String, _ v: Double, _ pct: Double, _ mhz: Double, _ color: Color) -> some View {
@@ -372,7 +399,7 @@ struct GPUMenuDropdown: View {
             Divider()
             OpenDashboardButton()
         }
-        .padding(12).frame(width: 285).background(Theme.bg).foregroundStyle(Theme.text)
+        .padding(12).frame(width: 250).background(Theme.bg).foregroundStyle(Theme.text)
     }
 }
 
@@ -427,24 +454,64 @@ struct MEMMenuDropdown: View {
             Divider()
             OpenDashboardButton()
         }
-        .padding(12).frame(width: 285).background(Theme.bg).foregroundStyle(Theme.text)
+        .padding(12).frame(width: 250).background(Theme.bg).foregroundStyle(Theme.text)
     }
 }
 
 struct NETMenuDropdown: View {
     let monitor: SiliconScopeMonitor
+    private let green = Color(red: 0.40, green: 0.82, blue: 0.55)
     var body: some View {
         let n = monitor.snapshot.network
+        let ifaces = InterfaceSampler.sample()
+        let connected = ifaces.filter { $0.isConnected }
+        let notConnected = ifaces.filter { !$0.isConnected }
         VStack(alignment: .leading, spacing: 6) {
             MenuSectionHeader("Network")
+            ForEach(connected) { i in
+                HStack(spacing: 6) {
+                    Image(systemName: ifaceIcon(i)).font(.system(size: 11)).foregroundStyle(Theme.accent)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(i.name).font(.system(size: 11, design: .monospaced)).foregroundStyle(Theme.text).lineLimit(1)
+                        if let ip = i.ipv4 {
+                            Text(ip).font(.system(size: 9.5, design: .monospaced)).foregroundStyle(Theme.dim)
+                        }
+                    }
+                    Spacer(minLength: 0)
+                    Text("Connected").font(.system(size: 9.5, design: .monospaced)).foregroundStyle(green)
+                }
+            }
+            Divider()
             MenuKV(label: "↓ Download", value: formatRate(n.downloadBytesPerSec), color: MetricPalette.downC)
-            Sparkline(values: monitor.history.netDown, color: MetricPalette.downC, height: 26)
+            Sparkline(values: monitor.history.netDown, color: MetricPalette.downC, height: 22)
             MenuKV(label: "↑ Upload", value: formatRate(n.uploadBytesPerSec), color: MetricPalette.upC)
-            Sparkline(values: monitor.history.netUp, color: MetricPalette.upC, height: 26)
+            Sparkline(values: monitor.history.netUp, color: MetricPalette.upC, height: 22)
+            HStack {
+                Text("Peak ↓ \(formatRate(monitor.history.netDown.max() ?? 0))")
+                    .font(.system(size: 9.5, design: .monospaced)).foregroundStyle(Theme.faint)
+                Spacer()
+                Text("Peak ↑ \(formatRate(monitor.history.netUp.max() ?? 0))")
+                    .font(.system(size: 9.5, design: .monospaced)).foregroundStyle(Theme.faint)
+            }
+            if !notConnected.isEmpty {
+                Divider()
+                MenuSectionHeader("Not Connected")
+                ForEach(notConnected) { i in
+                    Text(i.name).font(.system(size: 10.5, design: .monospaced))
+                        .foregroundStyle(Theme.dim).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
             Divider()
             OpenDashboardButton()
         }
-        .padding(12).frame(width: 255).background(Theme.bg).foregroundStyle(Theme.text)
+        .padding(12).frame(width: 258).background(Theme.bg).foregroundStyle(Theme.text)
+    }
+
+    private func ifaceIcon(_ i: InterfaceInfo) -> String {
+        let n = i.name.lowercased()
+        if n.contains("wi-fi") || n.contains("wifi") || n.contains("airport") { return "wifi" }
+        if n.contains("thunderbolt") || n.contains("bridge") { return "bolt.horizontal" }
+        return "cable.connector"
     }
 }
 
@@ -453,18 +520,46 @@ struct SSDMenuDropdown: View {
     private let cyan = Color(red: 0.32, green: 0.82, blue: 0.86)
     var body: some View {
         let d = monitor.snapshot.disk
+        let vols = VolumeSampler.sample()
+        let local = vols.filter { $0.isLocal }
+        let net = vols.filter { !$0.isLocal }
         VStack(alignment: .leading, spacing: 6) {
-            MenuSectionHeader("Disk")
+            MenuSectionHeader("Disks")
+            ForEach(local) { v in volumeRow(v) }
+            if !net.isEmpty {
+                Divider()
+                MenuSectionHeader("Network Disks")
+                ForEach(net) { v in volumeRow(v) }
+            }
+            Divider()
+            MenuSectionHeader("Activity")
             MenuKV(label: "Read", value: formatRate(d.readBytesPerSec), color: MetricPalette.downC)
+            Sparkline(values: monitor.history.diskRead, color: MetricPalette.downC, height: 22)
             MenuKV(label: "Write", value: formatRate(d.writeBytesPerSec), color: MetricPalette.upC)
-            MenuMeterRow(label: "Used",
-                         value: "free \(formatBytes(d.freeBytes)) / \(formatBytes(d.totalBytes))",
-                         fraction: d.usedFraction, color: cyan)
-            Sparkline(values: monitor.history.diskRead, color: MetricPalette.downC, height: 24)
-            Sparkline(values: monitor.history.diskWrite, color: MetricPalette.upC, height: 24)
+            Sparkline(values: monitor.history.diskWrite, color: MetricPalette.upC, height: 22)
             Divider()
             OpenDashboardButton()
         }
-        .padding(12).frame(width: 265).background(Theme.bg).foregroundStyle(Theme.text)
+        .padding(12).frame(width: 268).background(Theme.bg).foregroundStyle(Theme.text)
+    }
+
+    private func volumeRow(_ v: VolumeInfo) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+                Image(systemName: v.isLocal ? "internaldrive" : "externaldrive.connected.to.line.below")
+                    .font(.system(size: 10)).foregroundStyle(Theme.dim)
+                Text(v.name).font(.system(size: 11, design: .monospaced)).foregroundStyle(Theme.text)
+                    .lineLimit(1).truncationMode(.middle)
+                Spacer(minLength: 0)
+                Text("\(compactBytes(UInt64(max(0, v.freeBytes)))) free")
+                    .font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.dim)
+            }
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.white.opacity(0.06))
+                    Capsule().fill(cyan).frame(width: max(2, geo.size.width * v.usedFraction))
+                }
+            }.frame(height: 5)
+        }
     }
 }

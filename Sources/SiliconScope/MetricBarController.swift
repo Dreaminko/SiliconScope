@@ -54,24 +54,27 @@ final class MetricBarController: NSObject {
         Spec(id: "mem", key: "menubar.mem",
              glyph: { m, dark in
                 MenuBarGlyph.twoLine(label: "MEM",
-                                     line1: "U " + compactGB(m.snapshot.memory.usedGB),
-                                     line2: "F " + compactGB(m.snapshot.memory.freeGB), dark: dark)
+                                     prefix1: "U:", value1: iStatGB(m.snapshot.memory.usedGB),
+                                     prefix2: "F:", value2: iStatGB(m.snapshot.memory.freeGB),
+                                     dark: dark, reserveValue: "999.9 GB")
              },
              dropdown: { m in AnyView(MEMMenuDropdown(monitor: m)) }),
 
         Spec(id: "net", key: "menubar.net",
              glyph: { m, dark in
                 MenuBarGlyph.twoLine(label: "NET",
-                                     line1: "↓" + compactRate(m.snapshot.network.downloadBytesPerSec),
-                                     line2: "↑" + compactRate(m.snapshot.network.uploadBytesPerSec), dark: dark)
+                                     prefix1: "↓", value1: iStatRate(m.snapshot.network.downloadBytesPerSec),
+                                     prefix2: "↑", value2: iStatRate(m.snapshot.network.uploadBytesPerSec),
+                                     dark: dark, reserveValue: "999 MB")
              },
              dropdown: { m in AnyView(NETMenuDropdown(monitor: m)) }),
 
         Spec(id: "ssd", key: "menubar.ssd",
              glyph: { m, dark in
                 MenuBarGlyph.twoLine(label: "SSD",
-                                     line1: "U " + compactBytes(m.snapshot.disk.totalBytes - m.snapshot.disk.freeBytes),
-                                     line2: "F " + compactBytes(m.snapshot.disk.freeBytes), dark: dark)
+                                     prefix1: "U:", value1: iStatBytes(m.snapshot.disk.totalBytes - m.snapshot.disk.freeBytes),
+                                     prefix2: "F:", value2: iStatBytes(m.snapshot.disk.freeBytes),
+                                     dark: dark, reserveValue: "999.9 GB")
              },
              dropdown: { m in AnyView(SSDMenuDropdown(monitor: m)) }),
     ]
