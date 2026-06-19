@@ -22,6 +22,7 @@ final class SiliconScopeMonitor {
     struct History {
         var soc: [Double] = []
         var pCPU: [Double] = []        // 0...1
+        var eCPU: [Double] = []        // 0...1
         var gpu: [Double] = []         // 0...1
         var ane: [Double] = []         // Watts
         var media: [Double] = []       // GB/s (Media Engine)
@@ -37,6 +38,7 @@ final class SiliconScopeMonitor {
         mutating func push(_ s: SystemSnapshot) {
             roll(&soc, s.power.socWatts)
             roll(&pCPU, s.cpu.pUsage)
+            roll(&eCPU, s.cpu.eUsage)
             roll(&gpu, s.gpu.usage)
             roll(&ane, s.power.aneWatts)
             roll(&media, s.bandwidth.mediaGBs)
@@ -201,6 +203,7 @@ final class SiliconScopeMonitor {
                 self.updateMemoryRates(snap)
                 self.history.push(snap)
                 self.checkAlertsAndNotify()
+                MetricBarController.shared.sync(monitor: self)
                 let interval = UserDefaults.standard.object(forKey: "refreshInterval") as? Double ?? 1.0
                 try? await Task.sleep(for: .seconds(max(0.3, interval)))
             }

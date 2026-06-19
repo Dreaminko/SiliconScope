@@ -20,6 +20,12 @@ struct SiliconScopeApp: App {
     @State private var monitor = SiliconScopeMonitor()
 
     var body: some Scene {
+        dashboardWindow
+        mainMenuBar
+        Settings { SettingsView() }
+    }
+
+    private var dashboardWindow: some Scene {
         Window("SiliconScope", id: "siliconscope-main") {
             DashboardView(monitor: monitor)
                 .frame(minWidth: 640, minHeight: 600)
@@ -34,7 +40,9 @@ struct SiliconScopeApp: App {
         }
         .windowResizability(.contentMinSize)
         .defaultSize(width: 700, height: 740)
+    }
 
+    private var mainMenuBar: some Scene {
         MenuBarExtra {
             MenuBarView(monitor: monitor)
                 .onAppear { monitor.start() }
@@ -42,10 +50,6 @@ struct SiliconScopeApp: App {
             MenuBarIcon(monitor: monitor)
         }
         .menuBarExtraStyle(.window)
-
-        Settings {
-            SettingsView()
-        }
     }
 
     /// Resolves the app icon without ever touching SwiftPM's `Bundle.module`.

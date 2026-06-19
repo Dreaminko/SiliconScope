@@ -414,9 +414,10 @@ private struct CPUCard: View {
     let cpu: CPUSample
     let topology: CPUTopology?
     let history: [Double]
+    @AppStorage("menubar.cpu") private var cpuMB = false
 
     var body: some View {
-        Card(title: "CPU") {
+        Card(title: "CPU", menuBarPin: $cpuMB) {
             Bar(label: "E-cores", value: cpu.eUsage,
                 detail: String(format: "%.0f%%  %.0f MHz", cpu.eUsagePercent, cpu.eFreqMHz))
             Bar(label: "P-cores", value: cpu.pUsage,

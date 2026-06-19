@@ -107,14 +107,19 @@ func formatBytes(_ bytes: UInt64) -> String {
 
 struct Card<Content: View>: View {
     let title: String
+    var menuBarPin: Binding<Bool>? = nil   // when set, a switch in the title promotes the card to the menu bar
     @ViewBuilder var content: Content
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(title.uppercased())
-                .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
-                .tracking(1.5)
-                .foregroundStyle(Theme.faint)
+            HStack(spacing: 6) {
+                Text(title.uppercased())
+                    .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
+                    .tracking(1.5)
+                    .foregroundStyle(Theme.faint)
+                Spacer(minLength: 0)
+                if let pin = menuBarPin { MenuBarPin(isOn: pin) }
+            }
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
