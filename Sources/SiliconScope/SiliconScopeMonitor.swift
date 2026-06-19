@@ -328,6 +328,7 @@ final class SiliconScopeMonitor {
     private func benchmarkPort(for kind: AIRuntimeKind) -> Int {
         switch kind {
         case .lmStudio: return Self.port(forKey: "aiRuntimeLMStudioPort", default: 1234)
+        case .rapidMLX: return 8000
         case .llamaCpp: return snapshot.aiRuntime.ollamaEmbeddedPort ?? 8080
         default:        return Self.port(forKey: "aiRuntimeOllamaPort", default: 11434)
         }

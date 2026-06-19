@@ -24,6 +24,7 @@ public struct RuntimeAPIClient: Sendable {
         case .ollama:   return await probeOllama(port: ollamaPort)
         case .lmStudio: return await probeLMStudio(port: lmStudioPort)
         case .llamaCpp: return await probeLlamaCpp(port: ollamaEmbeddedPort ?? 8080)
+        case .rapidMLX: return await probeOpenAI(port: 8000, source: .rapidMLX)   // OpenAI-compatible
         case .some:                                   // mlx / jan / gpt4all / vllm
             var s = RuntimeAPISample(); s.status = .runningNoServer; return s
         case .none:
@@ -73,6 +74,23 @@ public struct RuntimeAPIClient: Sendable {
                 }
             return s
         }
+        if let data = try? await http.get(port: port, path: "/v1/models"),
+           let resp = try? JSONDecoder().decode(OpenAIModels.self, from: data) {
+            s.status = .ok; s.lastUpdated = Date()
+            s.loadedModels = (resp.data ?? []).map {
+                RuntimeModelInfo(name: $0.id, sizeBytes: 0, sizeVRAMBytes: 0,
+                                 parameterSize: nil, quantization: nil, contextLength: nil)
+            }
+            return s
+        }
+        s.status = .runningNoServer
+        return s
+    }
+
+    // MARK: - Generic OpenAI-compatible server (Rapid-MLX :8000, etc.)
+
+    private func probeOpenAI(port: Int, source: RuntimeAPISample.Source) async -> RuntimeAPISample {
+        var s = RuntimeAPISample(); s.source = source
         if let data = try? await http.get(port: port, path: "/v1/models"),
            let resp = try? JSONDecoder().decode(OpenAIModels.self, from: data) {
             s.status = .ok; s.lastUpdated = Date()

@@ -70,6 +70,19 @@ final class AIRuntimeMatchTests: XCTestCase {
         XCTAssertNil(AIRuntimeKind.embeddedPort(args: nil))
     }
 
+    // Rapid-MLX (OpenAI-compatible MLX engine) resolves to .rapidMLX, not bare .mlx.
+    func testRapidMLXMatch() {
+        // Installed via uv / pip / brew → a `rapid-mlx` wrapper binary.
+        XCTAssertEqual(AIRuntimeKind.match(path: "/Users/x/.local/bin/rapid-mlx",
+                                           name: "rapid-mlx", args: "rapid-mlx serve gemma-4-26b-4bit"), .rapidMLX)
+        // Module invocation via python — argv carries rapid_mlx.
+        XCTAssertEqual(AIRuntimeKind.match(path: "/opt/homebrew/bin/python3.12", name: "python3.12",
+                                           args: "python -m rapid_mlx serve --port 8000"), .rapidMLX)
+        // Must NOT be misclassified as bare MLX even with no argv.
+        XCTAssertNotEqual(AIRuntimeKind.match(path: "/Users/x/.local/bin/rapid-mlx",
+                                              name: "rapid-mlx", args: nil), .mlx)
+    }
+
     // primaryKind ranks by grouped RSS; the Ollama group (parent+runner) outweighs a small llama.cpp.
     func testPrimaryKindByGroupedRSS() {
         var s = AIRuntimeSample()

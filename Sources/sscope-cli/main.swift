@@ -116,7 +116,7 @@ if CommandLine.arguments.contains("--bench") {
         primaryKind: kind, ollamaEmbeddedPort: ai.ollamaEmbeddedPort,
         ollamaPort: 11434, lmStudioPort: 1234)
     if let kind, let model = api.loadedModels.first?.name {
-        let port = kind == .lmStudio ? 1234 : 11434
+        let port = switch kind { case .lmStudio: 1234; case .rapidMLX: 8000; default: 11434 }
         print("\nbenchmark: \(kind.displayName) · \(model) — generating…")
         if let r = await BenchmarkClient().run(kind: kind, port: port, model: model) {
             print(String(format: "  decode: %.1f tok/s  (%d tokens)", r.tokensPerSec, r.tokenCount))

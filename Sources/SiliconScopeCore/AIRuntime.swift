@@ -1,11 +1,11 @@
 //
 //  File:      AIRuntime.swift
 //  Created:   2026-06-14
-//  Updated:   2026-06-14
+//  Updated:   2026-06-19
 //  Developer: Kennt Kim / Calida Lab
 //  Overview:  Catalog + identity for local AI runtimes (Ollama, llama.cpp, LM Studio,
-//             MLX, Jan, GPT4All, vLLM). Pure logic — no syscalls; consumes the path/args
-//             that ProcessSampler already resolved.
+//             MLX, Rapid-MLX, Jan, GPT4All, vLLM). Pure logic — no syscalls; consumes the
+//             path/args that ProcessSampler already resolved.
 //  Notes:     proc_name truncates to 15 chars, so the executable PATH is the primary
 //             signal and BUNDLE identity overrides basename — the Ollama runner is a
 //             llama-server child, so basename alone would misclassify it as llama.cpp.
@@ -15,7 +15,7 @@
 import Foundation
 
 public enum AIRuntimeKind: String, Sendable, CaseIterable {
-    case ollama, llamaCpp, lmStudio, mlx, jan, gpt4all, vllm
+    case ollama, llamaCpp, lmStudio, mlx, rapidMLX, jan, gpt4all, vllm
 
     public var displayName: String {
         switch self {
@@ -23,6 +23,7 @@ public enum AIRuntimeKind: String, Sendable, CaseIterable {
         case .llamaCpp: return "llama.cpp"
         case .lmStudio: return "LM Studio"
         case .mlx:      return "MLX"
+        case .rapidMLX: return "Rapid-MLX"
         case .jan:      return "Jan"
         case .gpt4all:  return "GPT4All"
         case .vllm:     return "vLLM"
@@ -44,6 +45,10 @@ public enum AIRuntimeKind: String, Sendable, CaseIterable {
 
         // Stage 2 — basename / args (only reached when Stage 1 found nothing).
         let base = (p as NSString).lastPathComponent
+        // Rapid-MLX (rapid-mlx / rapid_mlx) — checked before the generic MLX match since the
+        // OpenAI-compatible server is a distinct runtime (port 8000), not bare mlx_lm.
+        if base == "rapid-mlx" || p.contains("rapid-mlx") || p.contains("rapid_mlx")
+            || a.contains("rapid-mlx") || a.contains("rapid_mlx") { return .rapidMLX }
         if ["llama-server", "llama-cli", "llama-bench"].contains(base) { return .llamaCpp }
         if a.contains("mlx_lm.server") || a.contains("mlx_lm.generate") || a.contains("mlx_lm") { return .mlx }
         if base == "lms" || p.contains("LM Studio") || a.contains("LM Studio") { return .lmStudio }

@@ -55,6 +55,7 @@ extension AIRuntimeKind {
         case .llamaCpp: return "terminal.fill"
         case .lmStudio: return "macwindow"
         case .mlx:      return "cpu.fill"
+        case .rapidMLX: return "hare.fill"
         case .jan, .gpt4all, .vllm: return "brain"
         }
     }
