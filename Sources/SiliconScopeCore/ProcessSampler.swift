@@ -20,6 +20,15 @@ public final class ProcessSampler {
     private var previousCPU: [pid_t: UInt64] = [:]
     private var previousTimeNs: UInt64 = 0
 
+    /// proc_taskinfo's pti_total_user/system are mach-absolute-time ticks, NOT nanoseconds.
+    /// On Apple Silicon the timebase is 125/3, so a raw tick count read as ns makes CPU%
+    /// come out ~42x too low. Convert ticks → ns with this factor (identity on Intel).
+    private static let timebase: mach_timebase_info_data_t = {
+        var t = mach_timebase_info_data_t()
+        mach_timebase_info(&t)
+        return t
+    }()
+
     /// Path basenames worth reading argv for (AI-runtime candidates only). Keeps the
     /// gated KERN_PROCARGS2 read off the hot path for the ~1k unrelated processes.
     private static let argvCandidateBasenames: Set<String> = [
@@ -39,7 +48,8 @@ public final class ProcessSampler {
 
         for pid in Self.allPIDs() where pid > 0 {
             guard let info = Self.taskInfo(pid) else { continue }
-            let cpuNs = info.pti_total_user + info.pti_total_system
+            let cpuTicks = info.pti_total_user + info.pti_total_system
+            let cpuNs = cpuTicks * UInt64(Self.timebase.numer) / UInt64(Self.timebase.denom)
             currentCPU[pid] = cpuNs
 
             var cpuPercent = 0.0
