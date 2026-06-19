@@ -53,6 +53,11 @@ not just a terminal dweller, can actually read.
 
 So I built it.
 
+And once it existed, I realized it was finally time to part with **iStat Menus** — my daily
+monitor for years. That's what **2.0** is: the release where SiliconScope grew the full
+menu-bar suite, per-unit sensors, and battery health it needed to take iStat's place on my
+own Mac.
+
 ## Install
 
 **[⬇ Download the latest DMG](https://github.com/kennss/SiliconScope/releases/latest)**, then:
