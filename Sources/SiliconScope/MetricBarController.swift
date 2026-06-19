@@ -40,6 +40,40 @@ final class MetricBarController: NSObject {
                                   colors: [MetricPalette.eCPU, MetricPalette.pCPU], dark: dark)
              },
              dropdown: { m in AnyView(CPUMenuDropdown(monitor: m)) }),
+
+        Spec(id: "gpu", key: "menubar.gpu",
+             glyph: { m, dark in
+                MenuBarGlyph.bars(label: "GPU",
+                                  values: [m.snapshot.gpu.usage,
+                                           min(1, m.snapshot.bandwidth.mediaGBs / max(m.mediaPeakGBs, 0.5)),
+                                           min(1, m.snapshot.power.aneWatts / max(m.anePeakWatts, 0.1))],
+                                  colors: [MetricPalette.gpu, MetricPalette.media, MetricPalette.ane], dark: dark)
+             },
+             dropdown: { m in AnyView(GPUMenuDropdown(monitor: m)) }),
+
+        Spec(id: "mem", key: "menubar.mem",
+             glyph: { m, dark in
+                MenuBarGlyph.twoLine(label: "MEM",
+                                     line1: "U " + compactGB(m.snapshot.memory.usedGB),
+                                     line2: "F " + compactGB(m.snapshot.memory.freeGB), dark: dark)
+             },
+             dropdown: { m in AnyView(MEMMenuDropdown(monitor: m)) }),
+
+        Spec(id: "net", key: "menubar.net",
+             glyph: { m, dark in
+                MenuBarGlyph.twoLine(label: "NET",
+                                     line1: "↓" + compactRate(m.snapshot.network.downloadBytesPerSec),
+                                     line2: "↑" + compactRate(m.snapshot.network.uploadBytesPerSec), dark: dark)
+             },
+             dropdown: { m in AnyView(NETMenuDropdown(monitor: m)) }),
+
+        Spec(id: "ssd", key: "menubar.ssd",
+             glyph: { m, dark in
+                MenuBarGlyph.twoLine(label: "SSD",
+                                     line1: "U " + compactBytes(m.snapshot.disk.totalBytes - m.snapshot.disk.freeBytes),
+                                     line2: "F " + compactBytes(m.snapshot.disk.freeBytes), dark: dark)
+             },
+             dropdown: { m in AnyView(SSDMenuDropdown(monitor: m)) }),
     ]
 
     /// Called each monitor tick: reconcile items with toggles, refresh glyphs.

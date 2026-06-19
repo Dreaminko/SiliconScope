@@ -435,9 +435,10 @@ private struct AcceleratorCard: View {
     let anePeak: Double
     let mediaPeak: Double
     let history: [Double]
+    @AppStorage("menubar.gpu") private var gpuMB = false
 
     var body: some View {
-        Card(title: "GPU / Media / Neural Engine") {
+        Card(title: "GPU / Media / Neural Engine", menuBarPin: $gpuMB) {
             Bar(label: "GPU", value: gpu.usage,
                 detail: String(format: "%.0f%%  %.1f W  %.0f MHz", gpu.usagePercent, power.gpuWatts, gpu.freqMHz))
             Bar(label: "Media", value: min(1, bandwidth.mediaGBs / max(mediaPeak, 0.5)),
@@ -459,6 +460,7 @@ private struct MemoryBandwidthCard: View {
     let bandwidthPeak: Double
     let memHistory: [Double]
     let bwHistory: [Double]
+    @AppStorage("menubar.mem") private var memMB = false
 
     private let wiredColor = Color(red: 0.36, green: 0.62, blue: 0.98)
     private let activeColor = Color(red: 0.34, green: 0.74, blue: 0.62)
@@ -477,7 +479,7 @@ private struct MemoryBandwidthCard: View {
 
     private var memorySection: some View {
         VStack(alignment: .leading, spacing: 3) {
-            SubLabel("Memory")
+            SubLabel("Memory", menuBarPin: $memMB)
             HStack {
                 Text(String(format: "%.1f / %.0f GB", memory.usedGB, memory.totalGB))
                     .font(.system(size: 12, weight: .medium, design: .monospaced))
@@ -526,6 +528,8 @@ private struct NetworkDiskCard: View {
     let readHistory: [Double]
     let writeHistory: [Double]
 
+    @AppStorage("menubar.net") private var netMB = false
+    @AppStorage("menubar.ssd") private var ssdMB = false
     private let downColor = Color(red: 0.34, green: 0.74, blue: 0.62)
     private let upColor = Color(red: 0.95, green: 0.62, blue: 0.30)
 
@@ -541,7 +545,7 @@ private struct NetworkDiskCard: View {
 
     private var networkSection: some View {
         VStack(alignment: .leading, spacing: 3) {
-            SubLabel("Network")
+            SubLabel("Network", menuBarPin: $netMB)
             KV(key: "↓ Download", value: formatRate(network.downloadBytesPerSec), valueColor: downColor)
             KV(key: "↑ Upload", value: formatRate(network.uploadBytesPerSec), valueColor: upColor)
             Spacer(minLength: 4)
@@ -552,7 +556,7 @@ private struct NetworkDiskCard: View {
 
     private var diskSection: some View {
         VStack(alignment: .leading, spacing: 3) {
-            SubLabel("Disk")
+            SubLabel("Disk", menuBarPin: $ssdMB)
             KV(key: "Read", value: formatRate(disk.readBytesPerSec), valueColor: downColor)
             KV(key: "Write", value: formatRate(disk.writeBytesPerSec), valueColor: upColor)
             Bar(label: "Used", value: disk.usedFraction,
@@ -566,11 +570,16 @@ private struct NetworkDiskCard: View {
 
 private struct SubLabel: View {
     let text: String
-    init(_ text: String) { self.text = text }
+    var menuBarPin: Binding<Bool>? = nil
+    init(_ text: String, menuBarPin: Binding<Bool>? = nil) { self.text = text; self.menuBarPin = menuBarPin }
     var body: some View {
-        Text(text.uppercased())
-            .font(.system(size: 9, weight: .semibold, design: .monospaced))
-            .tracking(1.2).foregroundStyle(Theme.faint)
+        HStack(spacing: 6) {
+            Text(text.uppercased())
+                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                .tracking(1.2).foregroundStyle(Theme.faint)
+            if let pin = menuBarPin { MenuBarPin(isOn: pin) }
+            Spacer(minLength: 0)
+        }
     }
 }
 

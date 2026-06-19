@@ -108,10 +108,12 @@ enum MenuBarGlyph {
         let width = ceil(labelW + gap + textW) + 2
         let img = NSImage(size: NSSize(width: width, height: height), flipped: false) { _ in
             let w = drawStackedLabel(label, ink: ink)
-            let originX = w + gap
+            let rightEdge = w + gap + textW   // both lines right-aligned so values line up
+            let w1 = s1.size(withAttributes: attrs).width
+            let w2 = s2.size(withAttributes: attrs).width
             let lh = s1.size(withAttributes: attrs).height
-            s1.draw(at: NSPoint(x: originX, y: height / 2 + (height / 2 - lh) / 2), withAttributes: attrs)  // top
-            s2.draw(at: NSPoint(x: originX, y: (height / 2 - lh) / 2), withAttributes: attrs)               // bottom
+            s1.draw(at: NSPoint(x: rightEdge - w1, y: height / 2 + (height / 2 - lh) / 2), withAttributes: attrs)  // top
+            s2.draw(at: NSPoint(x: rightEdge - w2, y: (height / 2 - lh) / 2), withAttributes: attrs)               // bottom
             return true
         }
         img.isTemplate = false
@@ -122,8 +124,106 @@ enum MenuBarGlyph {
 // MARK: - Shared palette + helpers
 
 enum MetricPalette {
-    static let eCPU = NSColor(srgbRed: 0.95, green: 0.70, blue: 0.30, alpha: 1)  // E-cores amber
-    static let pCPU = NSColor(srgbRed: 0.36, green: 0.62, blue: 0.98, alpha: 1)  // P-cores blue
+    static let eCPU  = NSColor(srgbRed: 0.95, green: 0.70, blue: 0.30, alpha: 1)  // E-cores amber
+    static let pCPU  = NSColor(srgbRed: 0.36, green: 0.62, blue: 0.98, alpha: 1)  // P-cores blue
+    static let gpu   = NSColor(srgbRed: 0.40, green: 0.82, blue: 0.55, alpha: 1)  // green
+    static let media = NSColor(srgbRed: 0.98, green: 0.62, blue: 0.30, alpha: 1)  // orange
+    static let ane   = NSColor(srgbRed: 0.74, green: 0.53, blue: 0.99, alpha: 1)  // purple
+    static let down  = NSColor(srgbRed: 0.34, green: 0.74, blue: 0.62, alpha: 1)  // teal
+    static let up    = NSColor(srgbRed: 0.98, green: 0.62, blue: 0.30, alpha: 1)  // orange
+    // SwiftUI mirrors for dropdown views.
+    static var gpuC: Color { Color(nsColor: gpu) }
+    static var mediaC: Color { Color(nsColor: media) }
+    static var aneC: Color { Color(nsColor: ane) }
+    static var downC: Color { Color(nsColor: down) }
+    static var upC: Color { Color(nsColor: up) }
+}
+
+// Compact one-token formatters for the tiny two-line glyphs ("44G", "3.4T", "202K").
+func compactGB(_ gb: Double) -> String { gb >= 1024 ? String(format: "%.1fT", gb / 1024) : String(format: "%.0fG", gb) }
+func compactBytes(_ b: UInt64) -> String { compactGB(Double(b) / 1_073_741_824) }
+func compactRate(_ bytesPerSec: Double) -> String {
+    let k = bytesPerSec / 1024
+    return k >= 1024 ? String(format: "%.1fM", k / 1024) : String(format: "%.0fK", k)
+}
+
+// MARK: - Shared dropdown components
+
+/// Small faint caption above a history sparkline so it's not a mystery line.
+struct GraphCaption: View {
+    let text: String
+    init(_ text: String) { self.text = text }
+    var body: some View {
+        Text(text).font(.system(size: 8.5, design: .monospaced)).foregroundStyle(Theme.faint)
+    }
+}
+
+struct MenuKV: View {
+    let label: String, value: String
+    var color: Color = Theme.text
+    var body: some View {
+        HStack {
+            Text(label).font(.system(size: 11, design: .monospaced)).foregroundStyle(Theme.dim)
+            Spacer()
+            Text(value).font(.system(size: 11, weight: .medium, design: .monospaced)).foregroundStyle(color)
+        }
+    }
+}
+
+/// Horizontal stacked segments (fractions summing ~1), iStat memory-bar style.
+struct MenuStackedBar: View {
+    let segments: [(Double, Color)]
+    var body: some View {
+        GeometryReader { geo in
+            HStack(spacing: 0) {
+                ForEach(Array(segments.enumerated()), id: \.offset) { _, seg in
+                    Rectangle().fill(seg.1).frame(width: max(0, geo.size.width * seg.0))
+                }
+                Spacer(minLength: 0)
+            }
+        }
+        .frame(height: 9)
+        .clipShape(RoundedRectangle(cornerRadius: 3))
+    }
+}
+
+/// Colored swatch + label + value (memory legend).
+struct MenuLegendRow: View {
+    let color: Color, label: String, value: String
+    var body: some View {
+        HStack(spacing: 6) {
+            RoundedRectangle(cornerRadius: 2).fill(color).frame(width: 9, height: 9)
+            Text(label).font(.system(size: 11, design: .monospaced)).foregroundStyle(Theme.text)
+            Spacer()
+            Text(value).font(.system(size: 11, weight: .medium, design: .monospaced)).foregroundStyle(Theme.text)
+        }
+    }
+}
+
+func memSize(_ bytes: UInt64) -> String {
+    let gb = Double(bytes) / 1_073_741_824
+    return gb >= 1 ? String(format: "%.2f GB", gb) : String(format: "%.0f MB", Double(bytes) / 1_048_576)
+}
+
+/// Label + value + a fixed-color fill bar (0...1).
+struct MenuMeterRow: View {
+    let label: String, value: String
+    let fraction: Double, color: Color
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+                Text(label).font(.system(size: 11, design: .monospaced)).foregroundStyle(Theme.text)
+                Spacer(minLength: 0)
+                Text(value).font(.system(size: 10.5, design: .monospaced)).foregroundStyle(Theme.dim)
+            }
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.white.opacity(0.06))
+                    Capsule().fill(color).frame(width: max(2, geo.size.width * min(1, max(0, fraction))))
+                }
+            }.frame(height: 5)
+        }
+    }
 }
 
 /// Brings the main dashboard window forward from AppKit (the per-metric popovers are hosted
@@ -163,6 +263,7 @@ struct CPUMenuDropdown: View {
             MenuSectionHeader("CPU")
             coreRow("E-cores", s.cpu.eUsage, s.cpu.eUsagePercent, s.cpu.eFreqMHz, e)
             coreRow("P-cores", s.cpu.pUsage, s.cpu.pUsagePercent, s.cpu.pFreqMHz, p)
+            GraphCaption("E (amber) / P (blue) usage · 60s")
             ZStack {   // E (amber) + P (blue) usage history, overlaid
                 Sparkline(values: monitor.history.eCPU, color: e, height: 32, yDomain: 0...1)
                 Sparkline(values: monitor.history.pCPU, color: p, height: 32, yDomain: 0...1)
@@ -231,5 +332,139 @@ struct MenuBarPin: View {
         }
         .buttonStyle(.plain)
         .help(isOn ? "Showing in the menu bar — click to hide" : "Show this in the menu bar")
+    }
+}
+
+struct OpenDashboardButton: View {
+    var body: some View {
+        Button { openMainDashboard() } label: {
+            Label("Open Dashboard", systemImage: "macwindow").frame(maxWidth: .infinity)
+        }
+    }
+}
+
+// MARK: - GPU / MEM / NET / SSD dropdowns
+
+struct GPUMenuDropdown: View {
+    let monitor: SiliconScopeMonitor
+    var body: some View {
+        let s = monitor.snapshot
+        VStack(alignment: .leading, spacing: 7) {
+            MenuSectionHeader("GPU / Media / Neural")
+            MenuMeterRow(label: "GPU",
+                         value: String(format: "%.0f%%  %.1f W  %.0f MHz", s.gpu.usagePercent, s.power.gpuWatts, s.gpu.freqMHz),
+                         fraction: s.gpu.usage, color: MetricPalette.gpuC)
+            MenuMeterRow(label: "Media",
+                         value: String(format: "%.1f GB/s", s.bandwidth.mediaGBs),
+                         fraction: min(1, s.bandwidth.mediaGBs / max(monitor.mediaPeakGBs, 0.5)), color: MetricPalette.mediaC)
+            MenuMeterRow(label: "ANE est.",
+                         value: String(format: "%.1f W", s.power.aneWatts),
+                         fraction: min(1, s.power.aneWatts / max(monitor.anePeakWatts, 0.1)), color: MetricPalette.aneC)
+            MenuKV(label: "DRAM power", value: String(format: "%.1f W", s.power.dramWatts))
+            GraphCaption("GPU (green) / Media (orange) / ANE (purple) · 60s")
+            ZStack {   // all three normalized to 0...1 (each vs its tracked peak)
+                Sparkline(values: monitor.history.gpu, color: MetricPalette.gpuC, height: 30, yDomain: 0...1)
+                Sparkline(values: monitor.history.media.map { min(1, $0 / max(monitor.mediaPeakGBs, 0.5)) },
+                          color: MetricPalette.mediaC, height: 30, yDomain: 0...1)
+                Sparkline(values: monitor.history.ane.map { min(1, $0 / max(monitor.anePeakWatts, 0.1)) },
+                          color: MetricPalette.aneC, height: 30, yDomain: 0...1)
+            }
+            Divider()
+            OpenDashboardButton()
+        }
+        .padding(12).frame(width: 285).background(Theme.bg).foregroundStyle(Theme.text)
+    }
+}
+
+struct MEMMenuDropdown: View {
+    let monitor: SiliconScopeMonitor
+    private let wired = Color(red: 0.36, green: 0.62, blue: 0.98)       // blue
+    private let active = Color(red: 0.92, green: 0.38, blue: 0.34)      // red (iStat-style)
+    private let compressed = Color(red: 0.62, green: 0.55, blue: 0.95)  // purple
+    private let freeC = Color.white.opacity(0.12)
+
+    var body: some View {
+        let m = monitor.snapshot.memory
+        VStack(alignment: .leading, spacing: 6) {
+            MenuSectionHeader("Memory")
+            HStack {
+                Text(String(format: "%.1f / %.0f GB", m.usedGB, m.totalGB))
+                    .font(.system(size: 12, weight: .medium, design: .monospaced)).foregroundStyle(Theme.text)
+                Spacer()
+                Text(String(format: "%.0f%%", m.usedPercent))
+                    .font(.system(size: 11, weight: .medium, design: .monospaced)).foregroundStyle(monitor.memoryRisk.color)
+            }
+            MenuStackedBar(segments: [(m.wiredFraction, wired), (m.activeFraction, active),
+                                      (m.compressedFraction, compressed), (m.freeFraction, freeC)])
+            MenuLegendRow(color: wired, label: "Wired", value: memSize(m.wiredBytes))
+            MenuLegendRow(color: active, label: "Active", value: memSize(m.activeBytes))
+            MenuLegendRow(color: compressed, label: "Compressed", value: memSize(m.compressedBytes))
+            MenuLegendRow(color: freeC, label: "Free", value: memSize(m.freeBytes))
+
+            if m.swapTotalBytes > 0 {
+                Divider()
+                MenuSectionHeader("Swap")
+                MenuStackedBar(segments: [(Double(m.swapUsedBytes) / Double(m.swapTotalBytes), wired)])
+                Text(String(format: "%.2f GB of %.2f GB", m.swapUsedGB, Double(m.swapTotalBytes) / 1_073_741_824))
+                    .font(.system(size: 10.5, design: .monospaced)).foregroundStyle(Theme.dim)
+            }
+
+            Divider()
+            MenuSectionHeader("Top by Memory")
+            let topMem = Dictionary(grouping: monitor.snapshot.processes, by: \.name)
+                .map { (name: $0.key, bytes: $0.value.reduce(UInt64(0)) { $0 + $1.memoryBytes }) }
+                .sorted { $0.bytes > $1.bytes }
+                .prefix(5)
+            ForEach(Array(topMem), id: \.name) { entry in
+                HStack(spacing: 6) {
+                    Text(entry.name).font(.system(size: 11, design: .monospaced)).foregroundStyle(Theme.text)
+                        .lineLimit(1).truncationMode(.middle)
+                    Spacer(minLength: 0)
+                    Text(memSize(entry.bytes))
+                        .font(.system(size: 11, weight: .medium, design: .monospaced)).foregroundStyle(Theme.dim)
+                }
+            }
+            Divider()
+            OpenDashboardButton()
+        }
+        .padding(12).frame(width: 285).background(Theme.bg).foregroundStyle(Theme.text)
+    }
+}
+
+struct NETMenuDropdown: View {
+    let monitor: SiliconScopeMonitor
+    var body: some View {
+        let n = monitor.snapshot.network
+        VStack(alignment: .leading, spacing: 6) {
+            MenuSectionHeader("Network")
+            MenuKV(label: "↓ Download", value: formatRate(n.downloadBytesPerSec), color: MetricPalette.downC)
+            Sparkline(values: monitor.history.netDown, color: MetricPalette.downC, height: 26)
+            MenuKV(label: "↑ Upload", value: formatRate(n.uploadBytesPerSec), color: MetricPalette.upC)
+            Sparkline(values: monitor.history.netUp, color: MetricPalette.upC, height: 26)
+            Divider()
+            OpenDashboardButton()
+        }
+        .padding(12).frame(width: 255).background(Theme.bg).foregroundStyle(Theme.text)
+    }
+}
+
+struct SSDMenuDropdown: View {
+    let monitor: SiliconScopeMonitor
+    private let cyan = Color(red: 0.32, green: 0.82, blue: 0.86)
+    var body: some View {
+        let d = monitor.snapshot.disk
+        VStack(alignment: .leading, spacing: 6) {
+            MenuSectionHeader("Disk")
+            MenuKV(label: "Read", value: formatRate(d.readBytesPerSec), color: MetricPalette.downC)
+            MenuKV(label: "Write", value: formatRate(d.writeBytesPerSec), color: MetricPalette.upC)
+            MenuMeterRow(label: "Used",
+                         value: "free \(formatBytes(d.freeBytes)) / \(formatBytes(d.totalBytes))",
+                         fraction: d.usedFraction, color: cyan)
+            Sparkline(values: monitor.history.diskRead, color: MetricPalette.downC, height: 24)
+            Sparkline(values: monitor.history.diskWrite, color: MetricPalette.upC, height: 24)
+            Divider()
+            OpenDashboardButton()
+        }
+        .padding(12).frame(width: 265).background(Theme.bg).foregroundStyle(Theme.text)
     }
 }
