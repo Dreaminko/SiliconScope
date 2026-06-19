@@ -1,5 +1,29 @@
 # Changelog
 
+## v1.8.0 — 2026-06-19
+
+iStat-style per-metric menu-bar items — promote any card to its own menu-bar readout.
+
+- **Per-metric menu-bar items** — each dashboard card (CPU / GPU / MEM / NET / SSD) has a
+  small pin toggle that promotes that metric to its own item in the menu bar, with a live
+  glyph and a rich dropdown. The combined "SS" glyph stays on by default; the rest are opt-in.
+  (Implemented with AppKit `NSStatusItem` + `NSPopover`: SwiftUI's `MenuBarExtra` can't toggle
+  scenes dynamically, and `isInserted:` triggers a main-menu update loop.)
+- **Glyphs** — CPU shows thick E/P bars (amber/blue); GPU shows GPU/Media/ANE bars
+  (green/orange/purple); MEM/NET/SSD show a stacked label + two-line readout. Each is drawn to
+  a bitmap and adapts to the menu-bar appearance (light/dark).
+- **Fixed width** — the two-line glyphs reserve a worst-case value column and right-align the
+  number, so the menu bar no longer jiggles as values change width.
+- **iStat-style dropdowns** — CPU (E/P cores, temp, load avg, uptime, top processes); GPU/Media/ANE
+  meters + 60s history; MEM (Wired/Active/Compressed/Free stacked bar, swap, top by memory);
+  SSD (per-volume usage, network disks, R/W activity); NET (interfaces with IPv4, ↓/↑ + peak).
+- **Honest, local-only** — readouts use the decimal (Finder) convention so disk values match
+  iStat (576 GB, not 536 GiB). No public-IP lookup and no per-process network (both would need
+  an outbound call / privilege — against the "nothing leaves your Mac" stance).
+- **Fix — per-process CPU%.** `proc_taskinfo` CPU times are mach ticks, not nanoseconds; they
+  were used raw, so every process read ~42× too low on Apple Silicon. Now converted via
+  `mach_timebase_info`, matching Activity Monitor / iStat.
+
 ## v1.7.0 — 2026-06-19
 
 Daily-driver basics.
