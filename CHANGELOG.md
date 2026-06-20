@@ -1,5 +1,25 @@
 # Changelog
 
+## v2.1.0 — 2026-06-20
+
+Memory deep-dive (iStat/Activity-Monitor parity) + project hardening. First release delivered
+over the air via the v2.0 auto-updater.
+
+- **Memory PRESSURE** — the MEM card and dropdown now show memory pressure as a percentage
+  (`(wired + compressed) / total`, the figure Activity Monitor / iStat display) with a colored
+  bar driven by the *kernel* pressure level (green/yellow/red — stays honest when the % is low
+  but the kernel reports critical), plus the **App Memory** / **Cached Files** breakdown.
+- **Memory PAGES** — the MEM dropdown adds live VM page rates (Page-ins, Page-outs, Swap-ins,
+  Swap-outs per second); Swap-outs turn red when nonzero (eviction under real pressure).
+- **Tested sampling math** — extracted the pure logic from hardware-coupled samplers and added
+  deterministic tests (13 → 47): the bottleneck classifier + per-chip bandwidth table, memory
+  fractions/budget, sensor classification, the bandwidth requestor map, and battery health.
+- **Contributing** — `sscope-cli --sensors` dumps the curated SMC keys (read/absent) + raw HID
+  set for verifying per-chip temperature tables, with a CONTRIBUTING.md guide. **M2–M5 owners
+  welcome.**
+- **Security** — added SECURITY.md (read-only / sudoless / no-egress posture) + private
+  vulnerability reporting.
+
 ## v2.0.0 — 2026-06-20
 
 SiliconScope grows from an AI/SoC dashboard into a **full menu-bar system monitor** — a
