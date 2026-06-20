@@ -1,0 +1,9 @@
+---
+import Base from '../../layouts/Base.astro';
+import Landing from '../../components/Landing.astro';
+import { STRINGS } from '../../i18n';
+const t = STRINGS.ko;
+---
+<Base lang="ko" title="SiliconScope — Apple Silicon 시스템 모니터" description={t.hero.sub}>
+  <Landing lang="ko" />
+</Base>

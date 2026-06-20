@@ -1,0 +1,95 @@
+---
+import { STRINGS, REPO, RELEASES_LATEST, SPECTALO, type Lang } from '../i18n';
+interface Props { lang: Lang }
+const { lang } = Astro.props;
+const t = STRINGS[lang];
+const alt = lang === 'ko' ? { href: '/', label: 'EN' } : { href: '/ko/', label: '한국어' };
+const self = lang === 'ko' ? 'KO' : 'EN';
+---
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href={lang === 'ko' ? '/ko/' : '/'}>
+      <img class="brand-icon" src="/icon.png" alt="" width="28" height="28" />
+      Silicon<span class="dot">Scope</span>
+    </a>
+    <nav class="nav">
+      <span class="navlinks" style="display:flex; gap:22px;">
+        <a href="#features">{t.nav.features}</a>
+        <a href="#privacy">{t.nav.privacy}</a>
+        <a href="#download">{t.nav.download}</a>
+      </span>
+      <span class="lang"><a class="active">{self}</a> · <a href={alt.href}>{alt.label}</a></span>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="hero wrap">
+    <h1>{t.hero.title}</h1>
+    <p class="sub">{t.hero.sub}</p>
+    <div class="cta">
+      <a class="btn primary" href={RELEASES_LATEST}>{t.hero.download}</a>
+      <a class="btn secondary" href={REPO}>{t.hero.github}</a>
+    </div>
+    <div class="badges">{t.hero.badges.map((b) => <span>{b}</span>)}</div>
+    <div class="hero-shot"><img src="/img/dashboard.png" alt="SiliconScope dashboard" loading="eager" /></div>
+  </section>
+
+  <section class="section" id="features">
+    <div class="wrap">
+      {t.features.map((f) => (
+        <div class="feature">
+          <div class="feat-text">
+            <div class="feat-tag">{f.tag}</div>
+            <h2>{f.title}</h2>
+            <p>{f.body}</p>
+          </div>
+          <div class="feat-shot"><img src={f.img} alt={f.title} loading="lazy" /></div>
+        </div>
+      ))}
+    </div>
+  </section>
+
+  <section class="section gallery">
+    <div class="wrap">
+      <h2 class="gallery-title">{t.gallery.title}</h2>
+      <p class="gallery-sub">{t.gallery.sub}</p>
+      <div class="gallery-grid">
+        {t.gallery.items.map((g) => (
+          <figure class="gcard">
+            <img src={g.img} alt={g.label} loading="lazy" />
+            <figcaption>{g.label}</figcaption>
+          </figure>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <section class="section privacy" id="privacy">
+    <div class="wrap">
+      <h2>{t.privacy.title}</h2>
+      <p>{t.privacy.body}</p>
+    </div>
+  </section>
+
+  <section class="section download" id="download">
+    <div class="wrap">
+      <h2>{t.download.title}</h2>
+      <p class="note">{t.download.note}</p>
+      <div class="cta"><a class="btn primary" href={RELEASES_LATEST}>{t.download.button}</a></div>
+      <a class="source" href={REPO}>{t.download.source}</a>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <span>{t.footer.tagline}</span>
+    <span class="foot-links">
+      <a href={REPO}>GitHub</a>
+      <a href={SPECTALO}>{t.footer.other}</a>
+      <a href={alt.href}>{alt.label}</a>
+      <span>© 2026 Calida Lab</span>
+    </span>
+  </div>
+</footer>
