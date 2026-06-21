@@ -40,7 +40,13 @@ struct MenuBarView: View {
                     .frame(maxWidth: .infinity)
             }
             HStack {
-                Button("Settings…") { openSettings() }
+                Button("Settings…") {
+                    openSettings()
+                    // Bring the app forward so the Settings window opens in front of (and
+                    // focused over) whatever app the user clicked from — otherwise it appears
+                    // behind, inactive (grey), until a Cmd+Tab. Mirrors "Open Dashboard".
+                    NSApplication.shared.activate(ignoringOtherApps: true)
+                }
                 if UpdaterController.shared.canCheck {
                     Button("Check for Updates…") { UpdaterController.shared.checkForUpdates() }
                 }
