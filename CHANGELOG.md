@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.2.3 — 2026-06-21
+
+Sensors: **a fuller temperature panel on partially-mapped chips (e.g. M4 Max).** When a die
+exposes only a subset of its generation's curated SMC keys — M4 Max, for instance, reads back no
+Memory key — SiliconScope now fills the intended-but-absent category from the HID sensor set
+instead of leaving it blank. Per-core readings the chip genuinely doesn't expose are never
+fabricated, and fully-mapped chips (M1–M3) are untouched, with no extra cost. Follows up the M4
+Max report (#6).
+
 ## v2.2.2 — 2026-06-21
 
 Fix: **CPU core frequencies read as ~1–5 MHz on M4** (both E and P clusters). M4 changed the

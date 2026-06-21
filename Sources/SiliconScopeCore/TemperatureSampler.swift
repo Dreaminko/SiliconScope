@@ -1,7 +1,7 @@
 //
 //  File:      TemperatureSampler.swift
 //  Created:   2026-06-08
-//  Updated:   2026-06-19
+//  Updated:   2026-06-21
 //  Developer: Kennt Kim / Calida Lab
 //  Overview:  Reads categorized temperatures sudolessly. Prefers the rich Apple Silicon
 //             HID sensor set (IOHIDEventSystem, via HIDSensorReader) — the source iStat
@@ -34,8 +34,24 @@ public final class TemperatureSampler {
 
     public func sample() -> TemperatureSample {
         // 1) Best: curated per-generation SMC keys read directly -> friendly per-unit names
-        //    (P-Core / E-Core / GPU / Memory), exactly the iStat-style breakdown.
-        if let smc, let curated = Self.curatedSample(smc: smc) { return curated }
+        //    (P-Core / E-Core / GPU / Memory), the iStat-style breakdown.
+        if let smc {
+            let gen = SensorCatalog.detectGeneration()
+            if gen != .unknown, let curated = Self.curatedSample(smc: smc, gen: gen) {
+                // Some dies expose only a subset of their generation's keys (e.g. M4 Max reads
+                // back no Memory key). For any category the table INTENDS but that didn't read,
+                // fill it from the HID set so the panel isn't sparse — without fabricating the
+                // per-core readings the chip genuinely doesn't expose. Fully-read chips (e.g.
+                // M1) skip the HID read entirely, so there's no added cost or behavior change.
+                let defined = Set(SensorCatalog.curated(for: gen).map(\.category))
+                let missing = defined.subtracting(curated.groups.map(\.category))
+                if !missing.isEmpty {
+                    let hid = HIDSensorReader.read().filter { $0.celsius > 5 && $0.celsius < 130 }
+                    if !hid.isEmpty { return Self.supplement(curated, withHID: hid, categories: missing) }
+                }
+                return curated
+            }
+        }
 
         // 2) Rich HID sensor set (Apple Silicon, but raw PMU names) for chips without a table.
         let hid = HIDSensorReader.read().filter { $0.celsius > 5 && $0.celsius < 130 }
@@ -113,10 +129,7 @@ public final class TemperatureSampler {
     /// Reads the curated SMC key table for the detected Apple Silicon generation, directly
     /// (not by scanning), yielding friendly per-unit names. Returns nil if the chip is
     /// unknown or none of the keys read back (then the caller falls back to HID / scan).
-    static func curatedSample(smc: SMCReader) -> TemperatureSample? {
-        let gen = SensorCatalog.detectGeneration()
-        guard gen != .unknown else { return nil }
-
+    static func curatedSample(smc: SMCReader, gen: AppleSiliconGen) -> TemperatureSample? {
         var byCategory: [SensorCategory: [TempSensor]] = [:]
         for entry in SensorCatalog.curated(for: gen) {
             guard let value = smc.readDouble(entry.key), value > 5, value < 130 else { continue }
@@ -139,6 +152,39 @@ public final class TemperatureSampler {
             }
         }
         result.groups = groups
+        return result
+    }
+
+    /// Adds the given categories (intended by the curated table, but absent on this die) from
+    /// the HID sensor set. Categories already present from curated keys are left untouched — we
+    /// never fabricate the per-core readings a partially-mapped chip doesn't expose. Used to
+    /// keep the panel complete on chips like M4 Max that read back only a subset of their keys.
+    static func supplement(_ sample: TemperatureSample,
+                           withHID hid: [(name: String, celsius: Double)],
+                           categories: Set<SensorCategory>) -> TemperatureSample {
+        var hidByCategory: [SensorCategory: [TempSensor]] = [:]
+        for s in hid {
+            let (category, label) = friendlyHID(s.name)
+            guard categories.contains(category) else { continue }
+            hidByCategory[category, default: []].append(
+                TempSensor(rawName: s.name, name: label, celsius: s.celsius))
+        }
+        guard !hidByCategory.isEmpty else { return sample }
+
+        var result = sample
+        var groups = sample.groups
+        for (category, sensors) in hidByCategory {
+            let group = SensorGroup(category: category, sensors: sensors.sorted { $0.name < $1.name })
+            groups.append(group)
+            switch category {
+            case .gpu:     if result.gpuCelsius == 0 { result.gpuCelsius = group.average }
+            case .battery: if result.batteryCelsius == 0 { result.batteryCelsius = group.average }
+            case .cpu:     if result.cpuCelsius == 0 { result.cpuCelsius = group.average; result.cpuMaxCelsius = group.maximum }
+            default:       break
+            }
+        }
+        // Keep groups in canonical category order so the panel layout stays stable.
+        result.groups = SensorCategory.allCases.compactMap { cat in groups.first { $0.category == cat } }
         return result
     }
 

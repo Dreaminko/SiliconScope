@@ -1,7 +1,7 @@
 //
 //  File:      SensorClassificationTests.swift
 //  Created:   2026-06-20
-//  Updated:   2026-06-20
+//  Updated:   2026-06-21
 //  Developer: Kennt Kim / Calida Lab
 //  Overview:  Pins the pure classification maps: SMC-key → category, raw HID name → friendly
 //             label/category, the per-generation curated key catalog, and the bandwidth
@@ -61,6 +61,41 @@ final class SensorClassificationTests: XCTestCase {
 
     func testUnknownGenerationIsEmpty() {
         XCTAssertTrue(SensorCatalog.curated(for: .unknown).isEmpty)
+    }
+
+    // MARK: - Partial-curated HID supplement (e.g. M4 Max reads no Memory key)
+
+    /// When a die exposes only a subset of its generation's curated keys, the intended-but-
+    /// absent category is filled from HID — without injecting unrelated HID sensors or
+    /// fabricating per-core CPU readings.
+    func testSupplementFillsOnlyMissingIntendedCategory() {
+        var sample = TemperatureSample()
+        sample.cpuCelsius = 40; sample.cpuMaxCelsius = 67; sample.gpuCelsius = 60
+        sample.groups = [
+            SensorGroup(category: .cpu, sensors: [TempSensor(rawName: "Tp01", name: "P-Core 1", celsius: 40)]),
+            SensorGroup(category: .gpu, sensors: [TempSensor(rawName: "Tg0K", name: "GPU 3", celsius: 60)]),
+        ]
+        let hid: [(name: String, celsius: Double)] = [
+            (name: "NAND CH0 temp", celsius: 36),   // → .memory
+            (name: "PMU tdie3", celsius: 58),        // → .cpu (must NOT be injected)
+            (name: "gas gauge battery", celsius: 35) // → .battery (must NOT be injected)
+        ]
+        let out = TemperatureSampler.supplement(sample, withHID: hid, categories: [.memory])
+
+        XCTAssertEqual(out.groups.first { $0.category == .memory }?.sensors.first?.name, "NAND CH0 temp")
+        XCTAssertEqual(out.groups.first { $0.category == .cpu }?.sensors.count, 1)   // unchanged
+        XCTAssertNil(out.groups.first { $0.category == .battery })                   // not requested
+        XCTAssertEqual(out.cpuCelsius, 40); XCTAssertEqual(out.gpuCelsius, 60)       // representatives kept
+        XCTAssertEqual(out.groups.map(\.category), [.cpu, .gpu, .memory])            // canonical order
+    }
+
+    func testSupplementWithNoMatchingHIDLeavesSampleUnchanged() {
+        var sample = TemperatureSample()
+        sample.groups = [SensorGroup(category: .cpu, sensors: [TempSensor(rawName: "Tp01", name: "P-Core 1", celsius: 40)])]
+        let hid: [(name: String, celsius: Double)] = [(name: "PMU tdie3", celsius: 58)]   // .cpu only
+        let out = TemperatureSampler.supplement(sample, withHID: hid, categories: [.memory])
+        XCTAssertEqual(out.groups.count, 1)
+        XCTAssertEqual(out.groups.first?.category, .cpu)
     }
 
     // MARK: - Bandwidth requestor → bucket (NeoAsitop-adapted map)
