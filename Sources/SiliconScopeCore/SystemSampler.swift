@@ -1,7 +1,7 @@
 //
 //  File:      SystemSampler.swift
 //  Created:   2026-06-08
-//  Updated:   2026-06-14
+//  Updated:   2026-06-22
 //  Developer: Kennt Kim / Calida Lab
 //  Overview:  Aggregates every SiliconScopeCore sampler into one SystemSnapshot. Intended
 //             to run on a single background thread driven by the UI's refresh loop.
@@ -24,6 +24,14 @@ public final class SystemSampler: @unchecked Sendable {
     private let battery = BatterySampler()
     private let processes = ProcessSampler()
     private let aiRuntime = AIRuntimeSampler()
+
+    // Peripheral battery (Magic/AirPods): heavier than a 1 s tick (IORegistry scan + a
+    // ~0.2 s system_profiler), so sample on a short cadence and reuse between ticks. 5 s keeps a
+    // newly-connected device appearing quickly without polling system_profiler every second.
+    private let peripheralSampler = PeripheralBatterySampler()
+    private var cachedPeripherals: [PeripheralBattery] = []
+    private var lastPeripheralSample: Date = .distantPast
+    private let peripheralInterval: TimeInterval = 5
 
     public init() {
         let topology = cpu?.topology
@@ -48,6 +56,7 @@ public final class SystemSampler: @unchecked Sendable {
         snapshot.network = network.sample()
         snapshot.disk = disk.sample()
         snapshot.battery = battery.sample()
+        snapshot.peripherals = sampledPeripherals()
         snapshot.processes = processes.sample()   // full set; UI sorts/filters/limits
         snapshot.aiRuntime = aiRuntime.sample(from: snapshot.processes)
         // Budget after detection so the resident runtime's RSS lifts `loadable`
@@ -57,5 +66,15 @@ public final class SystemSampler: @unchecked Sendable {
             activeRuntimeRSS: snapshot.aiRuntime.primaryMemoryBytes
         )
         return snapshot
+    }
+
+    /// Peripheral battery on a slow cadence (re-sampled every `peripheralInterval`s, reused
+    /// otherwise) so the per-second tick stays cheap.
+    private func sampledPeripherals() -> [PeripheralBattery] {
+        if Date().timeIntervalSince(lastPeripheralSample) >= peripheralInterval {
+            lastPeripheralSample = Date()
+            cachedPeripherals = peripheralSampler.sample()
+        }
+        return cachedPeripherals
     }
 }

@@ -9,7 +9,8 @@
 //                  device that exposes it. Fast, no subprocess; read every call.
 //               2) `system_profiler SPBluetoothDataType` — AirPods (Left/Right/Case) and other
 //                  Bluetooth devices whose battery only macOS aggregates. Spawns a process
-//                  (~1–2 s) so it is cached (~60 s TTL); battery moves slowly.
+//                  (~0.2 s, measured) so it is cached behind a short TTL; the caller (SystemSampler)
+//                  drives the real cadence (~5 s).
 //  Notes:     Logitech (MX Master etc.) expose battery only over HID++ — a separate tier (see
 //             NEXT_VERSION). No charging state yet (BatteryStatusFlags semantics unverified).
 //             system_profiler refresh blocks briefly when cold — call sample() off the main
@@ -69,7 +70,7 @@ public struct PeripheralBattery: Sendable, Equatable, Identifiable {
 public final class PeripheralBatterySampler {
     private var btCache: [PeripheralBattery] = []
     private var btCacheTime: Date = .distantPast
-    private let btTTL: TimeInterval = 60   // system_profiler is slow; battery changes slowly
+    private let btTTL: TimeInterval = 3   // safety floor under the caller's cadence; system_profiler is ~0.2 s
 
     public init() {}
 

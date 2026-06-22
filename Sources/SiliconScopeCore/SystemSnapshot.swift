@@ -1,7 +1,7 @@
 //
 //  File:      SystemSnapshot.swift
 //  Created:   2026-06-08
-//  Updated:   2026-06-16
+//  Updated:   2026-06-22
 //  Developer: Kennt Kim / Calida Lab
 //  Overview:  One unified reading of every SiliconScope metric, produced by SystemSampler
 //             and consumed by the UI. Pure value type (Sendable).
@@ -21,6 +21,7 @@ public struct SystemSnapshot: Sendable {
     public var network = NetworkSample()
     public var disk = DiskSample()
     public var battery = BatteryInfo()
+    public var peripherals: [PeripheralBattery] = []   // connected accessories with a readable battery
     public var processes: [ProcessRow] = []
     public var memoryBudget = MemoryBudget.empty
     public var aiRuntime = AIRuntimeSample()

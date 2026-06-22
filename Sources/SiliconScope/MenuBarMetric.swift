@@ -1,7 +1,7 @@
 //
 //  File:      MenuBarMetric.swift
 //  Created:   2026-06-19
-//  Updated:   2026-06-21
+//  Updated:   2026-06-22
 //  Developer: Kennt Kim / Calida Lab
 //  Overview:  iStat-style per-metric menu-bar items. Each dashboard card can be toggled
 //             into its own menu-bar item (a stacked label + a mini histogram or two-line
@@ -808,6 +808,14 @@ struct BatteryMenuDropdown: View {
                     .font(.system(size: 11, design: .monospaced)).foregroundStyle(Theme.dim)
             }
 
+            if !s.peripherals.isEmpty {
+                Divider()
+                MenuSectionHeader("Peripherals")
+                ForEach(s.peripherals) { device in
+                    PeripheralBatteryRow(device: device)
+                }
+            }
+
             Divider()
             MenuSectionHeader("Power")
             let pmax = 50.0
@@ -849,5 +857,39 @@ struct BatteryMenuDropdown: View {
             OpenDashboardButton()
         }
         .padding(.horizontal, 12).padding(.vertical, 9).frame(width: 260).background(Theme.bg).foregroundStyle(Theme.text)
+    }
+}
+
+/// One connected-accessory battery row (icon · name · %); AirPods add an L/R/Case line.
+private struct PeripheralBatteryRow: View {
+    let device: PeripheralBattery
+
+    private var icon: String {
+        switch device.kind {
+        case .mouse:      return "computermouse.fill"
+        case .keyboard:   return "keyboard.fill"
+        case .trackpad:   return "rectangle.fill"
+        case .headphones: return device.name.lowercased().contains("airpod") ? "airpods" : "headphones"
+        case .gamepad:    return "gamecontroller.fill"
+        case .other:      return "dot.radiowaves.left.and.right"
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            HStack(spacing: 6) {
+                Image(systemName: icon).font(.system(size: 10)).foregroundStyle(Theme.dim).frame(width: 15)
+                Text(device.name).font(.system(size: 11, design: .monospaced)).foregroundStyle(Theme.text)
+                    .lineLimit(1).truncationMode(.middle)
+                Spacer(minLength: 4)
+                Text("\(device.percent)%")
+                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(device.percent <= 20 ? Theme.heat(1) : Theme.text)
+            }
+            if let detail = device.detail {
+                Text(detail).font(.system(size: 9.5, design: .monospaced))
+                    .foregroundStyle(Theme.dim).padding(.leading, 21)
+            }
+        }
     }
 }
