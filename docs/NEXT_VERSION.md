@@ -66,25 +66,29 @@ isn't shown as broken). **Implemented (`PeripheralBatterySampler`) + verified on
 | AirPods (L / R / Case) | `system_profiler SPBluetoothDataType` (cached ~60 s) | ✅ **shipped** |
 | **Logitech over BLE (e.g. MX Master 3S)** | **none reachable** — see below | ❌ OS limit |
 
-**Logitech-over-BLE finding (2026-06-22, exhaustively tested on an MX Master 3S):** its battery
-is NOT reachable by any sudoless path macOS exposes —
+**Logitech-over-BLE finding (2026-06-22, tested on an MX Master 3S).** No *zero-permission* path
+reaches its battery:
 - IORegistry `BatteryPercent`: absent (Apple devices only).
-- `IOBluetoothDevice`: only an `ExtendedFeatures` *schema* (BatteryPercent id 0x47), no value.
+- `IOBluetoothDevice`: only an `ExtendedFeatures` *schema* (Logitech HID++ BatteryPercent id 0x47), no value.
 - `system_profiler`: absent. macOS's own battery menu can't show it either.
-- HID++ over `IOHIDDevice`: the HID++ report (id `0x10`) returns **`kIOReturnNotFound`** — over
-  BLE macOS surfaces only the mouse collection (usage 1/2), no `0xFF00` HID++ collection. (The
-  HID++ approach *does* work for USB Bolt-receiver-connected Logitech, just not BLE-direct.)
+- HID++ over `IOHIDDevice`: report id `0x10` → **`kIOReturnNotFound`** — over BLE macOS surfaces
+  only the mouse collection (usage 1/2), no `0xFF00` HID++ collection. (HID++ *does* work for a
+  USB Bolt-receiver Logitech connection, just not BLE-direct.)
 
-So the only route to BLE Logitech battery is a **CoreBluetooth GATT client speaking HID++-over-GATT**
-(what Logi Options+ does): large, needs the Bluetooth permission prompt (breaks "zero
-permissions"), and uncertain against a system-owned peripheral. **Deferred** — not worth it for
-one device class that even macOS can't show. The HID++/IOHIDDevice prototype was removed (dead
-weight: useless for BLE, and we don't show "—" rows anyway). References kept for any future
-CoreBluetooth attempt: [batteryconsole](https://github.com/omar16100/batteryconsole) has a BLE
-path; [OpenLogi](https://github.com/AprilNEA/OpenLogi) (Apache-2.0), [Mouser](https://github.com/TomBadash/Mouser) (MIT).
+**But it IS likely implementable via CoreBluetooth** — that's the references' BLE path, which I did
+NOT try: read the standard **BLE Battery Service `0x180F` / characteristic `0x2A19`** via
+`CBCentralManager.retrieveConnectedPeripherals(withServices:)` → connect → read (see
+[batteryconsole](https://github.com/omar16100/batteryconsole) `ble.rs`). Two caveats: (a) it needs
+the **Bluetooth permission prompt** (breaks the current zero-permissions stance); (b) uncertain
+whether the MX Master exposes the *standard* `0x180F` at all (Logitech sometimes ships only its
+proprietary HID++-over-GATT, which would be a much larger job). **Decision: deferred — revisit only
+if a user specifically requests peripheral battery for a BLE Logitech device.** Cheapest next step
+if revisited: a `CBUUID("180F")` probe to confirm the device exposes it before building anything.
+The HID++/IOHIDDevice prototype was removed (useless for BLE; we don't show "—" rows anyway).
 
-Gotchas (shipped tiers): `system_profiler` spawns a process (~1–2 s) → cached ~60 s, call off
-the main thread. AirPods report only while connected/advertising; values stale/absent when cased.
+Gotchas (shipped tiers): `system_profiler` is ~0.2 s (measured) → cached behind a short TTL,
+SystemSampler drives a ~5 s cadence, called off the main thread. AirPods report only while
+connected/advertising; values stale/absent when cased.
 
 Remaining: **UI wiring** — a Battery dropdown / dashboard card listing these (gated on having any).
 
