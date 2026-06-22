@@ -1,7 +1,7 @@
 //
 //  File:      InterfaceSampler.swift
 //  Created:   2026-06-19
-//  Updated:   2026-06-19
+//  Updated:   2026-06-22
 //  Developer: Kennt Kim / Calida Lab
 //  Overview:  Lists network interfaces (friendly name, BSD name, IPv4, connected) sudolessly
 //             via SystemConfiguration (display names) + getifaddrs (addresses / up state).
@@ -50,7 +50,7 @@ public enum InterfaceSampler {
                     var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
                     if getnameinfo(addr, socklen_t(addr.pointee.sa_len), &host, socklen_t(host.count),
                                    nil, 0, NI_NUMERICHOST) == 0 {
-                        ipByBSD[bsd] = String(cString: host)
+                        ipByBSD[bsd] = String(cBuffer: host)
                     }
                 }
                 cur = ifa.ifa_next

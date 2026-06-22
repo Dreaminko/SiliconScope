@@ -1,7 +1,7 @@
 //
 //  File:      CPUTopology.swift
 //  Created:   2026-06-08
-//  Updated:   2026-06-21
+//  Updated:   2026-06-22
 //  Developer: Kennt Kim / Calida Lab
 //  Overview:  Static Apple Silicon CPU topology: efficiency/performance core counts
 //             (sysctl) and the per-cluster DVFS frequency tables (IORegistry).
@@ -52,7 +52,7 @@ public struct CPUTopology: Sendable {
         guard sysctlbyname(name, nil, &size, nil, 0) == 0, size > 0 else { return nil }
         var buffer = [CChar](repeating: 0, count: size)
         guard sysctlbyname(name, &buffer, &size, nil, 0) == 0 else { return nil }
-        return String(cString: buffer)
+        return String(cBuffer: buffer)
     }
 
     // MARK: - DVFS table (IORegistry)

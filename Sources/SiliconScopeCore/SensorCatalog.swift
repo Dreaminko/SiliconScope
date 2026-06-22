@@ -1,7 +1,7 @@
 //
 //  File:      SensorCatalog.swift
 //  Created:   2026-06-19
-//  Updated:   2026-06-19
+//  Updated:   2026-06-22
 //  Developer: Kennt Kim / Calida Lab
 //  Overview:  Curated per-generation SMC temperature-key tables for Apple Silicon (M1–M5).
 //             Apple's SMC FourCC keys are near-arbitrary and change every generation, so the
@@ -109,6 +109,6 @@ public enum SensorCatalog {
         guard sysctlbyname("machdep.cpu.brand_string", nil, &size, nil, 0) == 0, size > 0 else { return "" }
         var buffer = [CChar](repeating: 0, count: size)
         guard sysctlbyname("machdep.cpu.brand_string", &buffer, &size, nil, 0) == 0 else { return "" }
-        return String(cString: buffer)
+        return String(cBuffer: buffer)
     }
 }

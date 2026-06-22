@@ -1,7 +1,7 @@
 //
 //  File:      ProcessSampler.swift
 //  Created:   2026-06-08
-//  Updated:   2026-06-19
+//  Updated:   2026-06-22
 //  Developer: Kennt Kim / Calida Lab
 //  Overview:  Builds the process table sudolessly via libproc. Stateful: each
 //             sample() diffs cumulative CPU time against the previous call to derive
@@ -106,7 +106,7 @@ public final class ProcessSampler {
     private static func name(_ pid: pid_t) -> String {
         var buffer = [CChar](repeating: 0, count: 256)
         let length = proc_name(pid, &buffer, UInt32(buffer.count))
-        return length > 0 ? String(cString: buffer) : "pid \(pid)"
+        return length > 0 ? String(cBuffer: buffer) : "pid \(pid)"
     }
 
     /// Full executable path, or "" if libproc denies it (root/other-user pids).
@@ -116,7 +116,7 @@ public final class ProcessSampler {
         let maxSize = 4 * 1024
         var buffer = [CChar](repeating: 0, count: maxSize)
         let length = proc_pidpath(pid, &buffer, UInt32(buffer.count))
-        return length > 0 ? String(cString: buffer) : ""
+        return length > 0 ? String(cBuffer: buffer) : ""
     }
 
     private static func basename(_ path: String) -> String {
