@@ -233,7 +233,8 @@ adapted but unverified**. On an M2/M3/M4/M5, run `xcrun swift run -q sscope-cli 
   distinction SiliconScope's AI view is built around:
   [**muramoto's measured deep-dive on the ANE for LLM inference**](https://zenn.dev/salescore/articles/776dff7a85f781)
   (Japanese, Zenn) — shows the ANE wins for small fixed-shape models (Whisper, ViT, embeddings)
-  but loses to the GPU on 4B+ LLMs.
+  but loses to the GPU on 4B+ LLMs. Shared by
+  [@KoheiKanagu](https://github.com/KoheiKanagu) in [#11](https://github.com/kennss/SiliconScope/issues/11).
 
 ## License
 
