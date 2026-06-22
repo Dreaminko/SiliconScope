@@ -55,36 +55,38 @@ UI: likely a richer **Battery** dropdown / dashboard card grouping these, gated 
 
 ### Peripheral battery in the battery dropdown (à la iStat Menus)
 
-Optional: show connected accessories' battery when the user opens the battery dropdown — a
-reasonable, iStat-precedented convenience (NOT a full multi-device dashboard; that's
-AirBattery's job). **Verified sudoless sources on a real machine (2026-06-22), per device type:**
+Show connected accessories' battery in the battery dropdown — iStat-precedented (NOT a full
+multi-device dashboard; that's AirBattery's job). **UX rule: only list devices we can read a
+real value for — no "—/unknown" rows.** So a device we can't read simply doesn't appear (it
+isn't shown as broken). **Implemented (`PeripheralBatterySampler`) + verified on a real machine:**
 
-| Device type | Sudoless source | Effort |
+| Device type | Sudoless source | Status |
 |---|---|---|
-| Apple Magic Mouse / Trackpad / Keyboard | IORegistry `BatteryPercent` (+ `BatteryStatusFlags`) on the HID node | **Easy** |
-| AirPods (L / R / Case) | `system_profiler SPBluetoothDataType` → `Left/Right/Case Battery Level` | **Easy** (parse) |
-| Other standard BLE-Battery-Service devices | same as above (macOS aggregates) | Easy |
-| **Logitech (e.g. MX Master 3S)** | **NOT** in IORegistry/`system_profiler` — needs **HID++** feature-report query over IOHIDDevice | **Medium**, vendor-specific |
+| Apple Magic Mouse / Trackpad / Keyboard | IORegistry `BatteryPercent` on the HID node | ✅ **shipped** |
+| AirPods (L / R / Case) | `system_profiler SPBluetoothDataType` (cached ~60 s) | ✅ **shipped** |
+| **Logitech over BLE (e.g. MX Master 3S)** | **none reachable** — see below | ❌ OS limit |
 
-Notes / gotchas:
-- `system_profiler SPBluetoothDataType` spawns a process and takes ~1–2 s → **cache it, refresh
-  ~every 60 s** (peripheral battery changes slowly), never per tick.
-- AirPods report only while connected/advertising; values go stale/absent when cased.
-- Logitech HID++ would be a genuine differentiator (even macOS's own battery menu can't show
-  MX Master without Logi Options+), but it's per-vendor work and can break across firmware.
-- **Not a reverse-engineering job — adapt an existing impl.** HID++ battery is well-solved:
-  open the device via `IOHIDDevice`, send a HID++ 2.0 feature report (Battery Status `0x1000`
-  / Unified Battery `0x1004`), parse the %. Sudoless (HID feature reports don't need root).
-  License-clean references (adapt protocol/logic + attribute, like we do for NeoAsitop):
-  **MIT** — [Mouser](https://github.com/TomBadash/Mouser) (Python, MX 2/3/3S),
-  [batteryconsole](https://github.com/omar16100/batteryconsole) (Rust, macOS-only, exactly this);
-  **Apache-2.0** — [OpenLogi](https://github.com/AprilNEA/OpenLogi) (Rust, 5.2k★).
-  Swift/IOKit mechanics can be *learned* from [optune](https://github.com/Sanjays2402/optune)
-  (Swift) but it's **GPL-3.0 → reference only, write our own** (SS license is undecided).
+**Logitech-over-BLE finding (2026-06-22, exhaustively tested on an MX Master 3S):** its battery
+is NOT reachable by any sudoless path macOS exposes —
+- IORegistry `BatteryPercent`: absent (Apple devices only).
+- `IOBluetoothDevice`: only an `ExtendedFeatures` *schema* (BatteryPercent id 0x47), no value.
+- `system_profiler`: absent. macOS's own battery menu can't show it either.
+- HID++ over `IOHIDDevice`: the HID++ report (id `0x10`) returns **`kIOReturnNotFound`** — over
+  BLE macOS surfaces only the mouse collection (usage 1/2), no `0xFF00` HID++ collection. (The
+  HID++ approach *does* work for USB Bolt-receiver-connected Logitech, just not BLE-direct.)
 
-Suggested phasing: (1) Mac's own battery expansion above → (2) easy peripheral tier (Apple
-Magic via IORegistry + AirPods via system_profiler) → (3) Logitech HID++ if wanted.
-Dev's own kit spans all tiers (Magic Mouse 2 + Magic Trackpad + AirPods Pro = easy; MX Master 3S = HID++).
+So the only route to BLE Logitech battery is a **CoreBluetooth GATT client speaking HID++-over-GATT**
+(what Logi Options+ does): large, needs the Bluetooth permission prompt (breaks "zero
+permissions"), and uncertain against a system-owned peripheral. **Deferred** — not worth it for
+one device class that even macOS can't show. The HID++/IOHIDDevice prototype was removed (dead
+weight: useless for BLE, and we don't show "—" rows anyway). References kept for any future
+CoreBluetooth attempt: [batteryconsole](https://github.com/omar16100/batteryconsole) has a BLE
+path; [OpenLogi](https://github.com/AprilNEA/OpenLogi) (Apache-2.0), [Mouser](https://github.com/TomBadash/Mouser) (MIT).
+
+Gotchas (shipped tiers): `system_profiler` spawns a process (~1–2 s) → cached ~60 s, call off
+the main thread. AirPods report only while connected/advertising; values stale/absent when cased.
+
+Remaining: **UI wiring** — a Battery dropdown / dashboard card listing these (gated on having any).
 
 ## TODO — cleanup
 

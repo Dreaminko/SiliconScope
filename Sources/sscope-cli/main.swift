@@ -184,7 +184,7 @@ if CommandLine.arguments.contains("--peripherals") {
     let devices = PeripheralBatterySampler().sample()
     print("\n=== peripheral battery (\(devices.count)) — sudoless (IORegistry + system_profiler) ===")
     if devices.isEmpty {
-        print("  (none — no connected device reports battery; Logitech needs HID++ — see NEXT_VERSION)")
+        print("  (none — no connected device reports a battery value via IORegistry / system_profiler)")
     }
     for d in devices {
         let extra = d.detail.map { "  (\($0))" } ?? ""
