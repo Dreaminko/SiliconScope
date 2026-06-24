@@ -1,7 +1,7 @@
 //
 //  File:      main.swift
 //  Created:   2026-06-08
-//  Updated:   2026-06-22
+//  Updated:   2026-06-24
 //  Developer: Kennt Kim / Calida Lab
 //  Overview:  Verification CLI for SiliconScopeCore. Prints sudoless power + CPU samples
 //             so we can confirm the data layer works in a real SwiftPM build.
@@ -174,6 +174,25 @@ if CommandLine.arguments.contains("--sensors-all") {
         let mark = curated.contains(e.key) ? " " : "*"
         let val = e.celsius.map { String(format: "%5.1f C", $0) } ?? "   —  "
         print(String(format: "  %@ %-5@ [%-4@] %@", mark as NSString, e.key as NSString, e.type as NSString, val as NSString))
+    }
+    print("\nMac model: run `sysctl hw.model machdep.cpu.brand_string` and include it.")
+}
+
+// Full SMC key dump — ALL keys incl. power (P*), current (I*), voltage (V*) — for discovering a
+// chip's SMC power layout (e.g. A18 system power PSTR, CPU/GPU rails). Run: sscope-cli --smc-all
+if CommandLine.arguments.contains("--smc-all") {
+    let all = TemperatureSampler().allSMCKeysFull()
+    let piv = all.filter { ["P", "I", "V"].contains($0.key.first.map(String.init) ?? "") }
+    print("\n=== SMC power / current / voltage keys (P* / I* / V*) — \(piv.count) ===")
+    print("  Looking for: system power PSTR, adapter PDTR, battery power, and any CPU/GPU power rails.")
+    for e in piv {
+        let v = e.value.map { String(format: "%.3f", $0) } ?? "—"
+        print(String(format: "  %-5@ [%-4@] %@", e.key as NSString, e.type as NSString, v as NSString))
+    }
+    print("\n=== all SMC keys (\(all.count)) ===")
+    for e in all {
+        let v = e.value.map { String(format: "%.3f", $0) } ?? "—"
+        print(String(format: "  %-5@ [%-4@] %@", e.key as NSString, e.type as NSString, v as NSString))
     }
     print("\nMac model: run `sysctl hw.model machdep.cpu.brand_string` and include it.")
 }

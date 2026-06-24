@@ -1,7 +1,7 @@
 //
 //  File:      SMCReader.swift
 //  Created:   2026-06-08
-//  Updated:   2026-06-22
+//  Updated:   2026-06-24
 //  Developer: Kennt Kim / Calida Lab
 //  Overview:  Minimal read-only Apple SMC client (sudoless) for fan speed and other
 //             scalar keys. Opens the AppleSMC IOService and reads keys via the fixed
@@ -108,6 +108,26 @@ final class SMCReader {
             let v = readDouble(key)
             let valid = (v.map { $0 > 5 && $0 < 130 } ?? false) ? v : nil
             out.append((key, type.trimmingCharacters(in: .whitespaces), valid))
+        }
+        return out.sorted { $0.0 < $1.0 }
+    }
+
+    /// Enumerates EVERY SMC key (any prefix/type) with its FourCC type and decoded scalar value
+    /// (nil if the type isn't a scalar we decode). The SMC analog of the IOReport --power-debug
+    /// dump — for discovering power/current/voltage keys (P*/I*/V*) on chips we don't map yet
+    /// (e.g. whether the A18 exposes system power `PSTR` or CPU/GPU power rails via SMC).
+    func allKeys() -> [(key: String, type: String, value: Double?)] {
+        guard let count = readDouble("#KEY"), count > 0 else { return [] }
+        var out: [(String, String, Double?)] = []
+        for index in 0..<Int(count) {
+            var input = SMCKeyData()
+            input.data8 = cmdReadIndex
+            input.data32 = UInt32(index)
+            var output = SMCKeyData()
+            guard call(&input, &output) else { continue }
+            let key = string(from: output.key)
+            guard let (type, _) = readKey(key) else { continue }
+            out.append((key, type.trimmingCharacters(in: .whitespaces), readDouble(key)))
         }
         return out.sorted { $0.0 < $1.0 }
     }
